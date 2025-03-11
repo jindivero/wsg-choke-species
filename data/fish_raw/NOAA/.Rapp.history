@@ -1,0 +1,2 @@
+load("/Users/juliaindivero/Dropbox/choke species/code/choke-species-data/raw/NOAA/nwfsc_haul.rda")
+load("/Users/jindiv/Library/CloudStorage/Dropbox/choke species/code/choke-species-data/data/fish_raw/NOAA/nwfsc_bio.rda")
