@@ -112,7 +112,7 @@ for (h in 1:length(species)) {
   #Create objects to test
   #List data names
   dat_names <- unique(dat.global$region)
-  dat_names[length(dat_names)+1] <- "global"
+  dat_names[length(dat_names)+1] <- "coastwide"
   
   for(i in 1:length(dats)){
     sub <- dats[[i]]
@@ -151,7 +151,7 @@ for (h in 1:length(species)) {
     # Model 1: null
     print(paste(this_species))
     print("fitting m1")
-    if(dat_names[i]!="global"){
+    if(dat_names[i]!="coastwide"){
       formula =   "catch ~ 1 + log_depth_scaled+ log_depth_scaled2"
     } else {
       formula = "catch ~ -1 + survey+ log_depth_scaled+ log_depth_scaled2"
@@ -178,7 +178,7 @@ for (h in 1:length(species)) {
     
     # Model 2: quadratic temp (uniform across regions)
     print("fitting m2")
-    if(dat_names[i]!="global"){
+    if(dat_names[i]!="coastwide"){
       formula =   "catch ~ 1+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
     } else {
       formula = "catch ~ -1 + survey +temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
@@ -204,7 +204,7 @@ for (h in 1:length(species)) {
     
     # Model 4: breakpoint MI low
     print("fitting m3")
-    if(dat_names[i]!="global"){
+    if(dat_names[i]!="coastwide"){
       formula =   "catch ~ 1 +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
     } else {
       formula = "catch ~ -1 + survey +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
@@ -231,7 +231,7 @@ for (h in 1:length(species)) {
     # Model 5: Breakpoint(mi median)
     print("fitting m4")
     start = Sys.time()
-    if(dat_names[i]!="global"){
+    if(dat_names[i]!="coastwide"){
       formula =   "catch ~ 1 +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
     } else {
       formula = "catch ~ -1 + survey +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
@@ -257,7 +257,7 @@ for (h in 1:length(species)) {
     # Model 5: breakpoint(mi high)
     print("fitting m5")
     start = Sys.time()
-    if(dat_names[i]!="global"){
+    if(dat_names[i]!="coastwide"){
       formula =   "catch ~ 1 +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
     } else {
       formula = "catch ~ -1 + survey +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
@@ -285,9 +285,9 @@ for (h in 1:length(species)) {
 
 
 ##Make AIC table
+models <- c("m1", "m2", "m3", "m4", "m5")
 aic_table = as.data.frame(matrix(NA, 1, length(models)+5))
-dat_names <- c("cc", "bc", "goa", "ebs", "global")
-
+dat_names <- c("cc", "bc", "goa", "ebs", "coastwide")
 
 for(i in 1:length(species)) {
   this_species = species[i]
@@ -302,7 +302,7 @@ for(i in 1:length(species)) {
       if(class(fit)!="try-error"){
         s <- try(sanity(fit, silent=TRUE))
         if(class(s)!="try-error"){
-          if(s$hessian_ok + s$eigen_values_ok + s$nlminb_ok == 3){
+          if(s$hessian_ok + s$eigen_values_ok +s$nlminb_ok== 3){
             temp[1,j] <- AIC(fit)
           }
         } else{
@@ -329,7 +329,7 @@ for(i in 1:length(species)) {
 aic_table <- aic_table[2:nrow(aic_table),]
 colnames(aic_table) <- c("model1", "model2", "model3", "model4", "model5", "species", "data type", "N obs", "N years", "N regions")
 
-write.csv(aic_table, "output/data_type/aic_table_region_comp_priors_goodonly.csv")
+write.csv(aic_table, "output/region_comp/aic_table_region_comp_priors_goodonly.csv")
 
 #Include all, including those that may have failed to converge
 aic_table = as.data.frame(matrix(NA, 1, length(models)+5))
@@ -368,4 +368,4 @@ for(i in 1:length(species)) {
 
 aic_table <- aic_table[2:nrow(aic_table),]
 colnames(aic_table) <- c("model1", "model2", "model3", "model4", "model5", "species", "data type", "N obs", "N years", "N regions")
-write.csv(aic_table, "output/data_type/aic_table_region_comp_priors_all.csv")
+write.csv(aic_table, "output/region_comp/aic_table_region_comp_priors_all.csv")

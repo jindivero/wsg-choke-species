@@ -279,6 +279,8 @@ for (h in 1:length(species)) {
 }
 
 ##Make AIC table
+dat_names <- c("bottomtrawl", "iphc")
+models <- c("m1", "m2", "m3", "m4", "m5")
 aic_table = as.data.frame(matrix(NA, 1, length(models)+2))
 
 for(i in 1:length(species)) {
@@ -294,7 +296,7 @@ for(i in 1:length(species)) {
     if(class(fit)!="try-error"){
       s <- try(sanity(fit, silent=TRUE))
       if(class(s)!="try-error"){
-        if(s$hessian_ok + s$eigen_values_ok + s$nlminb_ok == 3){
+        if(s$hessian_ok + s$eigen_values_ok== 2){
         temp[1,j] <- AIC(fit)
       }
       } else{
@@ -323,6 +325,8 @@ colnames(aic_table) <- c("model1", "model2", "model3", "model4", "model5", "spec
 write.csv(aic_table, "output/data_type/aic_table_data_type_priors_goodonly.csv")
 
 #Include all, including those that may have failed to converge
+models <- c("m1", "m2", "m3", "m4", "m5")
+dat_names <- c("bottomtrawl", "iphc")
 aic_table = as.data.frame(matrix(NA, 1, length(models)+2))
 
 for(i in 1:length(species)) {

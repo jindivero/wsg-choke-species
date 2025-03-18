@@ -46,6 +46,41 @@ calc_mi <- function(Eo, Ao, W, n,po2, inv.temp) {
   return(mi)
 }
 
+calc_po2_crit <- function(inv.temp, taxa, mi, body_size, model) {
+  W <- body_size
+  inv.temp <- inv.temp
+  ###Calculate Metabolic index 
+  ##Species parameters from Tim's paper
+  #Gadidae (lower, median, upper)
+  if(taxa=="gadidae") {
+    Eo <- c(-0.03064428,0.1883451,0.40414)
+    V <- c(2.852883, 1.716267, 8.796332)
+    n <- c(-0.1416557, 0.1883451, 0.05982743)
+  }
+  if(taxa=="perciformes"){
+    Eo <- c(0.0267307, 0.3102310, 0.5859761)
+    V <- c(1.734103, 1.59323, 8.836855)
+    n <- c(-0.1720744, 0.3102311, 0.03412396)
+  }
+  if(taxa=="elasmobranchii"){
+    #ie. Squalidae
+    Eo <- c(-0.07659791, 0.2661157, 0.6013813)
+    V <- c(0.7086717, 1.502317, 9.654109)
+    n <-c(-0.2180308, 0.2661157, 0.05064831)
+  }
+  if(taxa=="teleostei"){
+    #Orders Scorpaenidae, Soleida, Pleuronectida)
+    Eo <- c(-0.009823544, 0.2554435,0.5315111)
+    V <- c(1.639916,1.565438,8.815259)
+    n <-c(-0.1562307,0.2554435,0.03221273)
+  }
+  Ao <- 1/exp(V[2])
+  n <- n[2]
+  Eo <-  if(model=="model3") Eo[1] else if(model=="model4") Eo[2] else Eo[3]
+  po2 = mi/(W^n*Ao*exp(Eo * inv.temp))
+  return(po2)
+}
+
 # calc o2 solubility, relies on o2 in umol/kg
 gsw_O2sol_SP_pt <- function(sal,pt) {
   x = sal
