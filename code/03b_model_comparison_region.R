@@ -6,6 +6,8 @@ library(dplyr)
 library(tidyr)
 library(pals)
 library(purrr)
+library(gt)
+library(openxlsx2)
 
 set.seed(9876)
 
@@ -37,11 +39,21 @@ if(remove_ai){
   dat <- filter(dat, region!="ai")
 }
 
-#Just to confirm--remove iphc
+#remove iphc
 remove_iphc <- T
 if(remove_iphc){
   dat <- filter(dat, survey!="iphc")
 }
+
+#Remove other missing rows
+dat <- dat  %>%
+  drop_na(depth,year, mi1,mi2,mi3, X, Y, cpue_kg_km2)
+
+#Remove weird depths
+dat <- filter(dat, depth>0)
+
+#Remove oxygen outliers
+dat <- filter(dat, O2_umolkg<1500)
 
 ##Species to do--full list
 species <- c(unique(dat$common_name))
@@ -325,13 +337,42 @@ for(i in 1:length(species)) {
   }
 }
 
-
 aic_table <- aic_table[2:nrow(aic_table),]
 colnames(aic_table) <- c("model1", "model2", "model3", "model4", "model5", "species", "data type", "N obs", "N years", "N regions")
+#Round
+aic_table$model1 <- round(as.numeric(aic_table$model1), digits=1)
+aic_table$model2 <- round(as.numeric(aic_table$model2), digits=1)
+aic_table$model3 <- round(as.numeric(aic_table$model3), digits=1)
+aic_table$model4 <- round(as.numeric(aic_table$model4), digits=1)
+aic_table$model5 <- round(as.numeric(aic_table$model5), digits=1)
 
-write.csv(aic_table, "output/region_comp/aic_table_region_comp_priors_goodonly.csv")
+aic <- aic_table %>%
+  gt() %>%
+  tab_style(
+    style = cell_fill(color = "gray"),
+    locations = cells_body(columns = model1, rows = model1==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "darkgoldenrod1"),
+    locations = cells_body(columns = model2, rows = model2==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "lightblue"),
+    locations = cells_body(columns = model3, rows = model3==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "lightblue2"),
+    locations = cells_body(columns = model4, rows = model4==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "lightblue3"),
+    locations = cells_body(columns = model5, rows = model5==0)
+  )
 
-#Include all, including those that may have failed to converge
+write_xlsx(aic_table, "output/region_comp/aic_table_region_comp_priors_goodonly.xlsx")
+gtsave(aic, filename="output/region_comp/aic_table_region_comp_priors_goodonly.html")
+
+  #Include all, including those that may have failed to converge
 aic_table = as.data.frame(matrix(NA, 1, length(models)+5))
 
 for(i in 1:length(species)) {

@@ -23,6 +23,9 @@ dat <- list.files(path = "data/processed_data/fish", pattern = ".rds", full.name
 dat <- dat %>%
   drop_na(depth, mi1, temperature_C, salinity_psu, X, Y, year)
 
+dat <- dat %>%
+  drop_na(depth, X, Y, year)
+
 #Remove weird depths
 dat <- filter(dat, depth>0)
 

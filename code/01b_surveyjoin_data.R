@@ -1,0 +1,6 @@
+install.packages("pak")
+pak::pkg_install("DFO-NOAA-Pacific/surveyjoin")
+library(surveyjoin)
+cache_data()
+load_sql_data()
+d <- get_data("pacific cod")

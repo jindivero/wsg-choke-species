@@ -134,7 +134,10 @@ ggplot(cond_effects_preds, aes(mi_best, y=est_sc))+
   #geom_ribbon(aes(ymin = est_se_sc1, ymax = est_se_sc2, fill=data), alpha=0.4)+
   scale_x_continuous(limits=c(0,15, by=5))+
   labs(x = bquote('Metabolic Index'), y = bquote('Conditional Effect Population Density'~(kg~km^-2)))+
-  theme_minimal()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
   theme(legend.position="top")+
   theme(legend.title=element_blank())+
   theme(text=element_text(size=15))+
@@ -163,7 +166,10 @@ ggplot(cond_effects_preds, aes(mi_best, y=exp(est)))+
   #geom_ribbon(aes(ymin = est_se_sc1, ymax = est_se_sc2, fill=data), alpha=0.4)+
   xlim(0,5)+
   labs(x = bquote('Metabolic Index'), y = bquote('Conditional Effect Population Density'~(kg~km^-2)))+
-  theme_minimal()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
   theme(legend.position="top")+
   theme(text=element_text(size=15))
 
@@ -243,7 +249,10 @@ geom_line(aes(colour=data))+
 #geom_ribbon(aes(ymin = exp(est2), ymax = exp(est3), fill=data), alpha=0.4)+
   scale_x_continuous(limits=c(0,15, by=2))+
   labs(x = bquote('Metabolic Index'), y = bquote('Conditional Effect Population Density'~(kg~km^-2)))+
-  theme_minimal()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
   theme(legend.position="top")+
   theme(legend.title=element_blank())+
   theme(text=element_text(size=15))+
@@ -299,7 +308,10 @@ ggplot(bp_est, aes(y=species, x=breakpt, colour=data, shape=model))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
   geom_point(aes(colour=data, shape=model), size=3, position=ggstance::position_dodgev(height=0.4))+
   geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
-  theme_minimal()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
   theme(legend.position="top")+
   theme(legend.title=element_blank())+
   theme(text=element_text(size=15))+
@@ -331,7 +343,10 @@ ggplot(bp_est, aes(y=species, x=breakpt, colour=data, shape=model))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
   geom_point(aes(colour=data, shape=model), size=3, position=ggstance::position_dodgev(height=0.4))+
   geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
-  theme_minimal()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
   theme(legend.position="top")+
   theme(legend.title=element_blank())+
   theme(text=element_text(size=15))+
@@ -369,7 +384,10 @@ temp <- bp_est[i,]
 #find taxa from species
 taxa.2.use <- taxa$MI_Taxa[taxa$common_name==temp$species]
 #Calc invtemp
-invtemp.2.use <- 1/(273.15+ref_temp)
+kelvin = 273.15
+boltz = 0.000086173324
+tref <- 12
+invtemp.2.use <- (1 / boltz)  * ( 1 / (tref + 273.15) - 1 / (tref + 273.15))
 #Model
 model.2.use <- temp$model
 #calculate pO2 at a reference temperature and body size
@@ -392,12 +410,15 @@ ggplot(bp_est2, aes(y=species, x=est_o2, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
   geom_point(aes(colour=data), size=2, position=ggstance::position_dodgev(height=0.4))+
   geom_linerange(aes(xmin = est_o2-est_o2_se, xmax = est_o2+est_o2_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
-  theme_minimal()+
   theme(legend.position="top")+
   theme(legend.title=element_blank())+
   theme(text=element_text(size=15))+
  # xlim(0,50)+
   scale_colour_manual(values=c("#F8766D","#7CAE00", "#00BFC4",  "#C77CFF", "#00B0F6"))+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
   guides(colour=guide_legend(nrow=1,byrow=TRUE),shape=guide_legend(nrow=2,byrow=TRUE))+
   theme(panel.spacing = unit(3, "lines"))+
   xlab(bquote(pO[2]~"(kPa)")) +
@@ -422,7 +443,10 @@ ggplot(bp_est2, aes(y=species, x=est_o2, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
   geom_point(aes(colour=data), size=2, position=ggstance::position_dodgev(height=0.4))+
   geom_linerange(aes(xmin = est_o2-est_o2_se, xmax = est_o2+est_o2_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
-  theme_minimal()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
   theme(legend.position="top")+
   theme(legend.title=element_blank())+
   theme(text=element_text(size=15))+
