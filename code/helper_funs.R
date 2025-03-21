@@ -107,6 +107,44 @@ print_species <- function(type){
   return(species)
 }
 
+length_expand_nwfsc2 <- function(spc, sci_name){
+  bio <- readRDS("data/fish_raw/NOAA/nwfsc_bio.rds")
+  names(bio) = tolower(names(bio))
+  bio$scientific_name <- tolower(bio$scientific_name)
+  bio$common_name <- tolower(bio$common_name)
+  bio$event_id = as.numeric(bio$trawl_id)
+  bio$common_name <- ifelse(bio$common_name=="pacific spiny dogfish", "spiny dogfish", bio$common_name)
+  
+ bio_sub = dplyr::filter(bio, common_name == spc)
+ #If there is weight or length data present in data, get haul mean of weight
+ if(nrow(bio_sub)>0) {
+   ##Add weights if only length data:
+   # find length-weight relationship parameters for one species
+   pars <- rfishbase::length_weight(
+     #convert scientific name to first letter capitalized for fishbase
+     species_list = stringr::str_to_sentence(sci_name, locale = "en"))
+   #Get mean
+   a <- mean(pars$a)
+   b <- mean(pars$b)
+   #For longspine thornyhead, which is not in database for some reason, got these values from fishbase direct page
+   if(sci_name=="sebastolobus altivelis"){
+     a <- 0.00912
+     b=3.09
+   }
+   ##Assign a and b values if there are none available for the species in fishbase
+   if(a=="NaN"){
+     a <- 0.00675	
+   }
+   if(b=="NaN"){
+     b <- 3
+   }
+   #Calculate weight (and convert from g to kg)
+   bio_sub <- dplyr::mutate(bio_sub, weight = ifelse(is.na(weight), ((a*length_cm^b)*0.001), weight))
+   bio_summ <- group_by(bio_sub, event_id) %>% summarize(haul_weight=median(weight))
+   return(bio_summ)
+ }
+}
+
 length_expand_nwfsc <- function(spc, sci_name) {
   # load, clean, and join data
   bio <- readRDS("data/fish_raw/NOAA/nwfsc_bio.rds")
@@ -191,6 +229,18 @@ length_expand_nwfsc <- function(spc, sci_name) {
       #Get mean
       a <- mean(pars$a)
       b <- mean(pars$b)
+      ##For this species, which is for some reason not in database
+      if(sci_name=="sebastolobus altivelis"){
+        a <- 0.00912
+        b=3.09
+      }
+      ##Assign a and b values if there are none available for the species in fishbase
+      if(a=="NaN"){
+        a <- 0.00675	
+      }
+      if(b=="NaN"){
+        b <- 3
+      }
       #Make NAs where text
       dat_pos$weight <- ifelse(dat_pos$weight=="NaN", NA, dat_pos$weight)
       #Remove any zero weights
@@ -353,7 +403,76 @@ load_data_nwfsc <- function(spc,sci_name, dat.by.size, length) {
   return(dat)
 }
 
-length_expand_afsc <- function(sci_name) {
+length_expand_afsc2 <- function(spc, sci_name) {
+  bio2 <-readRDS("data/fish_raw/NOAA/ak_bts_goa_ebs_nbs_indivero_all_levels.RDS")
+  haul <- bio2$haul
+  specimen <- bio2$specimen
+  species <- bio2$species
+  size <- bio2$size
+  
+  #make lowercase
+  names(haul) <- tolower(names(haul))
+  names(specimen) <- tolower(names(specimen))
+  names(species) <- tolower(names(species))
+  names(size) <- tolower(names(bio2$size))
+  
+  species$species_name <- tolower(species$species_name)
+  
+  #Combine size and species
+  lengths <- dplyr::left_join(size, species)
+  lengths <- dplyr::left_join(lengths, haul)
+  
+  #Expand to make separate row for each measurement
+  lengths <- dplyr::filter(lengths, !is.na(frequency))
+  lengths2 <- tidyr::uncount(lengths, weights=frequency)
+  
+  #Combine
+  bio <- dplyr::left_join(specimen, species)
+  bio <- dplyr::left_join(bio, haul)
+  
+  #Combine specimen and length data
+  bio3 <- dplyr::bind_rows(bio, lengths)
+  
+  #Convert length from mm to cm
+  bio3$length_cm <- bio3$length*0.1
+  
+  #Convert weight from g to kg
+  bio3$weight <- bio3$weight*0.001
+  
+  #Event_id
+  bio3$event_id <-bio3$hauljoin
+  
+  bio_sub = dplyr::filter(bio3, species_name == sci_name)
+  
+  #If there is weight or length data present in data, get haul mean of weight
+  if(nrow(bio_sub)>0) {
+    ##Add weights if only length data:
+    # find length-weight relationship parameters for one species
+    pars <- rfishbase::length_weight(
+      #convert scientific name to first letter capitalized for fishbase
+      species_list = stringr::str_to_sentence(sci_name, locale = "en"))
+    #Get mean
+    a <- mean(pars$a)
+    b <- mean(pars$b)
+    #For longspine thornyhead, which is not in database for some reason, got these values from fishbase direct page
+    if(sci_name=="sebastolobus altivelis"){
+      a <- 0.00912
+      b=3.09
+    }
+    ##Assign a and b values if there are none available for the species in fishbase
+    if(a=="NaN"){
+      a <- 0.00675	
+    }
+    if(b=="NaN"){
+      b <- 3
+    }
+    #Calculate weight (and convert from g to kg)
+    bio_sub <- dplyr::mutate(bio_sub, weight = ifelse(is.na(weight), ((a*length_cm^b)*0.001), weight))
+    bio_summ <- group_by(bio_sub, event_id) %>% summarize(haul_weight=median(weight))
+    return(bio_summ)
+  }
+}
+length_expand_afsc <- function(spc, sci_name) {
   # load, clean, and join data
   bio2 <-readRDS("data/fish_raw/NOAA/ak_bts_goa_ebs_nbs_indivero_all_levels.RDS")
   catch2 <- readRDS("data/fish_raw/NOAA/ak_bts_goa_ebs_nbs_indivero_cpue_zerofilled.RDS")
@@ -522,6 +641,13 @@ length_expand_afsc <- function(sci_name) {
       a <- 0.00912
       b=3.09
     }
+    ##Assign a and b values if there are none available for the species in fishbase
+    if(a=="NaN"){
+      a <- 0.00675	
+    }
+    if(b=="NaN"){
+      b <- 3
+    }
     #Calculate weight (and convert from g to kg)
     dat_pos <- dplyr::mutate(dat_pos, weight = ifelse(is.na(weight), ((a*length_cm^b)*0.001), weight))
     #convert cm-g units
@@ -604,7 +730,7 @@ length_expand_afsc <- function(sci_name) {
       return(absent.df)
     }
   }
-  #If there are no hauls at all with any length measurements, do this instead (because caused an error in the kernel density function otherwise)
+  #If there are no hauls at all with any length measurements, do this instead
   if(nrow(dat_sub)>0){
     trawlids <- unique(dat_sub$trawl_id)
     if(length(trawlids)==0){
@@ -668,7 +794,7 @@ load_data_afsc <- function(sci_name, spc, dat.by.size, length=T) {
   dat$project <- dat$survey
   dat$event_id <- dat$trawl_id
   dat$date <- as.POSIXct(as.Date(dat$start_time, format = "%Y-%b-%d"))
-  dat <- dplyr::select(dat, event_id, common_name, scientific_name, project, survey, year, date, bottom_temperature_c, longitude_dd, latitude_dd, longitude, latitude, cpue_kg_km2,
+  dat <- dplyr::select(dat, event_id, common_name, scientific_name, project, survey, year, date, longitude_dd, latitude_dd, longitude, latitude, cpue_kg_km2,
                        depth_m, julian_day, nlength, median_weight, haul_weight, p1, p2, p3, p4)
   
   
@@ -688,7 +814,64 @@ load_data_afsc <- function(sci_name, spc, dat.by.size, length=T) {
   return(dat)
 }
 
-length_expand_bc <- function(sci_name, spc) {
+length_expand_bc2 <- function(spc, sci_name) {
+  # load, clean, and join data
+  itis <- readRDS("data/fish_raw/BC/species-table.rds")
+  bio2 <- readRDS("data/fish_raw/BC/pbs-bio-samples.rds")
+  
+  #Combine with species data
+  bio <- dplyr::full_join(bio2, itis, by="itis", relationship="many-to-many")
+  
+  #Rename dogfish
+  bio$common_name <- ifelse(bio$common_name=="north pacific spiny dogfish", "spiny dogfish", bio$common_name)
+  
+  #Put bio data in the same format as the NOAA bio data
+  #Convert g to kg
+  bio$weight <- bio$weight*0.001
+  
+  #rename columnns
+  bio$length_cm <- bio$length
+  
+  #Rename missing species
+  if(sci_name=="sebastes aleutianus"){
+    bio$scientific_name <- ifelse(str_detect(bio$scientific_name, "sebastes aleutianus"), "sebastes aleutianus", bio$scientific_name)
+    bio$common_name <- ifelse(str_detect(bio$common_name, "rougheye"), "rougheye rockfish", bio$common_name)
+  }
+
+  # filter out species of interest from joined (catch/haul/bio) dataset
+  bio_sub = dplyr::filter(bio[,c("event_id", "length_cm", "weight", "scientific_name")], scientific_name==sci_name)
+  
+  #If there is weight or length data present in data, get haul mean of weight
+  if(nrow(bio_sub)>0) {
+   ##Add weights if only length data:
+    # find length-weight relationship parameters for one species
+    pars <- rfishbase::length_weight(
+      #convert scientific name to first letter capitalized for fishbase
+      species_list = stringr::str_to_sentence(sci_name, locale = "en"))
+    #Get mean
+    a <- mean(pars$a)
+    b <- mean(pars$b)
+    #For longspine thornyhead, which is not in database for some reason, got these values from fishbase direct page
+    if(sci_name=="sebastolobus altivelis"){
+      a <- 0.00912
+      b=3.09
+    }
+    ##Assign a and b values if there are none available for the species in fishbase
+    if(a=="NaN"){
+      a <- 0.00675	
+    }
+    if(b=="NaN"){
+      b <- 3
+    }
+    #Calculate weight (and convert from g to kg)
+    bio_sub <- dplyr::mutate(bio_sub, weight = ifelse(is.na(weight), ((a*length_cm^b)*0.001), weight))
+    bio_summ <- group_by(bio_sub, event_id) %>% summarize(haul_weight=median(weight))
+    return(bio_summ)
+  }
+}
+  
+
+length_expand_bc <- function(spc, sci_name) {
   # load, clean, and join data
   itis <- readRDS("data/fish_raw/BC/species-table.rds")
   haul <- readRDS("data/fish_raw/BC/pbs-haul.rds")
@@ -797,6 +980,13 @@ length_expand_bc <- function(sci_name, spc) {
     if(sci_name=="sebastolobus altivelis"){
       a <- 0.00912
       b=3.09
+    }
+    ##Assign a and b values if there are none available for the species in fishbase
+    if(a=="NaN"){
+      a <- 0.00675	
+    }
+    if(b=="NaN"){
+      b <- 3
     }
     #Calculate weight (and convert from g to kg)
     dat_pos <- dplyr::mutate(dat_pos, weight = ifelse(is.na(weight), ((a*length_cm^b)*0.001), weight))
@@ -1262,7 +1452,7 @@ combine_all <- function(type){
 
 ###LOAD DATA ###
 prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
-  dat.by.size <- try(length_expand_bc(sci_name))
+  dat.by.size <- try(length_expand_bc(spc, sci_name))
   gc()
   if(is.data.frame(dat.by.size)){
     dat3 <- try(load_data_bc(sci_name = sci_name, spc=spc, dat.by.size = dat.by.size, length=F))
@@ -1278,29 +1468,16 @@ prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
     dat2 <- try(unique(dat2))
   }
   
-  if(!is.data.frame(dat.by.size)){
-    catch <- readRDS("data/fish_raw/NOAA/nwfsc_catch.rds")
-    names(catch) <- tolower(names(catch))
-    catch$common_name <- tolower(catch$common_name)
-    catch$scientific_name <- tolower(catch$scientific_name)
-    catch <- dplyr::filter(catch, scientific_name == sci_name)
-    if(length(catch)>0){
-      dat.by.size <- matrix(data=NA, nrow=1,ncol=1)
-      dat2 <- try(load_data_nwfsc(spc= spc, sci_name=sci_name, dat.by.size = dat.by.size, length=F))
-      dat2 <- try(unique(dat2))
-    }
-  }
-  
   gc()
   rm(dat.by.size)
   
-  dat.by.size <- try(length_expand_afsc(sci_name))
+  dat.by.size <- try(length_expand_afsc(spc, sci_name))
   gc()
   if(is.data.frame(dat.by.size)){
     dat5 <- try(load_data_afsc(sci_name = sci_name, spc=spc, dat.by.size = dat.by.size, length=F))
     dat5 <- try(unique(dat5))
   }
-  
+
   gc()
   
   #All regions present
@@ -1351,7 +1528,7 @@ prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
     #Northwest
     dat6 <- filter(dat4, survey=="nwfsc")
     #Just columns of interest
-    dat6 <- left_join(dat6[,c("event_id", "date", "year", "survey", "latitude", "longitude", "depth", "X", "Y", "cpue_kg_km2", "julian_day", "nlength", "median_weight", "haul_weight", "pass", "p1", "p2", "p3", "p4", "common_name", "scientific_name", "depth", "vessel", "tow", "bottom_temperature_c")], insitu, by=c("date", "latitude", "longitude"))
+    dat6 <- left_join(dat6[,c("event_id", "date", "year", "survey", "latitude", "longitude", "depth", "X", "Y", "cpue_kg_km2", "julian_day", "nlength", "median_weight", "haul_weight", "pass", "p1", "p2", "p3", "p4", "common_name", "scientific_name", "depth", "vessel", "tow")], insitu, by=c("date", "latitude", "longitude"))
     #Edit columns
     dat6$event_id <- dat6$event_id.x
     dat6$event_id.x <- NULL
@@ -1380,7 +1557,7 @@ prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
     
     #GOA, EBS & NBS 
     dat6 <- filter(dat4, survey=="EBS"|survey=="NBS"|survey=="GOA")
-    dat6 <- left_join(dat6[,c("event_id", "date", "year", "survey", "latitude", "longitude", "depth", "X", "Y", "cpue_kg_km2", "julian_day", "nlength", "median_weight", "haul_weight", "pass", "p1", "p2", "p3", "p4", "common_name", "scientific_name", "depth", "vessel", "tow", "bottom_temperature_c")], insitu[,c("event_id", "temperature_C", "do_mlpL", "salinity_psu", "sigma0_kgm3", "O2_umolkg")], by=c("event_id"))
+    dat6 <- left_join(dat6[,c("event_id", "date", "year", "survey", "latitude", "longitude", "depth", "X", "Y", "cpue_kg_km2", "julian_day", "nlength", "median_weight", "haul_weight", "pass", "p1", "p2", "p3", "p4", "common_name", "scientific_name", "depth", "vessel", "tow")], insitu[,c("event_id", "temperature_C", "do_mlpL", "salinity_psu", "sigma0_kgm3", "O2_umolkg")], by=c("event_id"))
     
     #Edit columns
     dat6$depth.1 <- NULL
@@ -1421,7 +1598,7 @@ prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
       }
       adjustment <- read_excel("data/fish_raw/IPHC/iphc-2024-fiss-hadj.xlsx")
       dat_IPHC <- IPHC(catch, adjustment, spc, sci_name)
-      dat <- bind_rows(dat, dat_IPHC)
+      dat <- bind_rows(dat, dat_IPHC)  
     }
     
     #Some other columns
@@ -1484,10 +1661,10 @@ prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
     
     #Reorder columns
     if(iphc==F){
-      dat <- relocate(dat, scientific_name, common_name, survey, year, date, doy, month, depth, longitude, latitude, cpue_kg_km2, cpue_kg_km2_sub, salinity_psu, temperature_C, sigma0_kgm3,do_mlpL, O2_umolkg, invtemp, po2, mi1,mi2,mi3, X, Y, p1,p2,p3,p4,median_weight, haul_weight, nlength, pass, vessel, tow, bottom_temperature_c)
+      dat <- select(dat, scientific_name, common_name, survey_name, survey, region, year, date, depth, longitude, latitude, catch_weight, catch_count,  salinity_psu, temperature_C, sigma0_kgm3,do_mlpL, O2_umolkg, invtemp, po2, mi1,mi2,mi3, X, Y, haul_weight, pass, vessel, tow)
     }
     if(iphc==T){
-      dat <- relocate(dat, scientific_name, common_name, survey, year, date, doy, month, depth, longitude, latitude, cpue_kg_km2, cpue_kg_km2_sub,cpue_weight, cpue_count, salinity_psu, temperature_C, sigma0_kgm3, do_mlpL, O2_umolkg, invtemp, po2,mi1,mi2,mi3,X, Y, p1,p2,p3,p4,median_weight, haul_weight, nlength, pass, vessel, tow, bottom_temperature_c)
+      dat <- select(dat, scientific_name, common_name, survey_name, survey,region, year, date,  depth, longitude, latitude, catch_weight, catch_count,cpue_weight, cpue_count, salinity_psu, temperature_C, sigma0_kgm3, do_mlpL, O2_umolkg, invtemp, po2,mi1,mi2,mi3,X, Y, haul_weight, pass, vessel, tow)
       
     }
 #Remove duplicates
@@ -1496,4 +1673,226 @@ prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
     dat$geometry <- NULL
     saveRDS(dat, file = paste("data/processed_data/fish/dat_", file_name, ".rds", sep=""))
   try(return(dat))
+}
+
+##Function to get separate species
+prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
+  #Filter species
+  dat_sub<- filter(dat, common_name==spc)
+  
+  #If species is not in the surveyjoin data, use the complete separate catch data
+  #NWFSC
+  if(nrow(dat_sub)==0){
+    catch <- readRDS("data/fish_raw/NOAA/nwfsc_catch.rds")
+    names(catch) = tolower(names(catch))
+    catch$common_name <- tolower(catch$common_name)
+    catch$scientific_name <- tolower(catch$scientific_name)
+    #Fix dogfish
+    catch$common_name <- ifelse(catch$common_name=="pacific spiny dogfish", "spiny dogfish", catch$common_name)
+    #Filter to species
+    catch = dplyr::filter(catch, scientific_name == sci_name)
+    if(nrow(catch)>0){
+    # prepare data and models -------------------------------------------------
+    catch$event_id <- catch$trawl_id
+    
+    # UTM transformation
+    dat_ll = catch
+    sp::coordinates(dat_ll) <- c("longitude_dd", "latitude_dd")
+    sp::proj4string(dat_ll) <- sp::CRS("+proj=longlat +datum=WGS84")
+    # convert to utm with spTransform
+    dat_utm = sp::spTransform(dat_ll, 
+                              sp::CRS("+proj=utm +zone=10 +datum=WGS84 +units=km"))
+    # convert back from sp object to data frame
+    catch = as.data.frame(dat_utm)
+    catch = dplyr::rename(catch, X = coords.x1,
+                        Y = coords.x2)
+    catch$scientific_name <- sci_name
+    catch$depth <- dat$depth_m
+    catch$survey <- "nwfsc"
+    catch$region <- "cc"
+    catch$survey_name <- catch$project
+    #Convert to per hectare 
+    catch$catch_weight <- catch$cpue_kg_km2/100
+    catch$catch_numbers <- catch$total_catch_numbers/catch$area_swept_ha
+    catch$latitude <- catch$latitude_dd
+    catch$longitude <- catch$longitude_dd
+    dat_sub1 <- dplyr::select(catch, event_id, common_name, scientific_name, survey_name, vessel, tow, year, longitude, latitude, catch_weight, catch_numbers,
+                         depth)
+    rm(catch)
+    gc()
+    }
+    ##BC
+    catch <- readRDS("data/fish_raw/BC/pbs-catch.rds")
+    haul <- readRDS("data/fish_raw/BC/pbs-haul.rds")
+    itis <- readRDS("data/fish_raw/BC/species-table.rds")
+    catch <- left_join(catch,itis)
+    #Rename dogfish
+    catch$common_name <- ifelse(catch$common_name=="north pacific spiny dogfish", "spiny dogfish", catch$common_name)
+    
+    #Combine catch data with haul data
+    catch <- dplyr::left_join(catch, haul, relationship = "many-to-many")
+    
+    catch = dplyr::filter(catch, scientific_name == sci_name)
+  
+    if(nrow(catch)>0){
+    catch$longitude <- catch$lon_start
+    catch$latitude <- catch$lat_start
+
+    # UTM transformation
+   dat_ll = catch
+    sp::coordinates(dat_ll) <- c("longitude", "latitude")
+    sp::proj4string(dat_ll) <- sp::CRS("+proj=longlat +datum=WGS84")
+    # convert to utm with spTransform
+    dat_utm = sp::spTransform(dat_ll, 
+                              sp::CRS("+proj=utm +zone=10 +datum=WGS84 +units=km"))
+    # convert back from sp object to  dataframe
+    catch = as.data.frame(dat_utm)
+    catch= dplyr::rename(catch, X = coords.x1,
+                        Y = coords.x2)
+    catch$depth <- dat$depth_m
+    catch$survey <- "dfo"
+    catch$region <- "bc"
+    catch$longitude <- catch$lon_start
+    catch$latitude <- catch$lat_start
+    dat_sub2 <- dplyr::select(catch, event_id, common_name, scientific_name, survey_name, survey, region, year, catch_weight, catch_numbers, longitude, latitude,
+                           depth)
+    rm(catch)
+    gc()
+    }
+    
+  #AFSC
+  bio2 <-readRDS("data/fish_raw/NOAA/ak_bts_goa_ebs_nbs_indivero_all_levels.RDS")
+  catch <-readRDS("data/fish_raw/NOAA/ak_bts_goa_ebs_nbs_indivero_cpue_zerofilled.RDS")
+  species <- bio2$species
+  names(catch) = tolower(names(catch))
+  names(species) =tolower(names(species))
+  species$species_name <- tolower(species$species_name)
+  species$common_name <- tolower(species$common_name)
+  catch <- dplyr::left_join(catch, species)
+  
+  catch <- filter(catch, common_name==spc)
+  
+  if(nrow(catch)>0){
+  catch$longitude <- catch$longitude_dd_start
+  catch$latitude <- catch$latitude_dd_start
+  catch$scientific_name <- catch$species_name
+  catch$event_id <- catch$hauljoin
+  catch$depth <- catch$depth_m
+  catch$catch_weight <- catch$cpue_kgkm2/100
+  catch$catch_numbers <- catch$count
+  catch$region <- tolower(catch$survey)
+  
+  # UTM transformation
+  dat_ll = catch
+  sp::coordinates(dat_ll) <- c("longitude", "latitude")
+  sp::proj4string(dat_ll) <- sp::CRS("+proj=longlat +datum=WGS84")
+  # convert to utm with spTransform
+  dat_utm = sp::spTransform(dat_ll, 
+                            sp::CRS("+proj=utm +zone=10 +datum=WGS84 +units=km"))
+  # convert back from sp object to data frame
+  catch = as.data.frame(dat_utm)
+  catch = dplyr::rename(catch, X = coords.x1,
+                      Y = coords.x2)
+  catch$latitude <- catch$latitude_dd_start
+  catch$longitude <- catch$long_dd_start
+  dat_sub3 <- dplyr::select(catch, event_id, common_name, scientific_name,survey, region, year, catch_weight, catch_numbers, longitude, latitude,
+                            depth)
+  rm(catch)
+  gc()
+  }
+  #Combine which exist
+  # List the data frames
+  dfs <- list(df1 = dat_sub1, df2 = datsub2, df3 = datsub3)
+  
+  # Filter out the NULL values (non-existing data frames)
+  dfs <- dfs[sapply(dfs, is.data.frame)]
+  
+  # Combine the remaining data frames
+  if (length(dfs) > 0) {
+    dat_sub <- bind_rows(dfs)
+  } else {
+    dat_sub <- NULL
+  }
+  }
+  
+  ##Add IPHC if needed
+  if(iphc){
+    if(spc=="pacific halibut"){
+      catch <-  read_excel("data/fish_raw/IPHC/Set and Pacific halibut data.xlsx")
+    }
+    if(spc!="pacific halibut"){
+      catch <-  read_excel("data/fish_raw/IPHC/Non_Pacific_halibut_data.xlsx")
+    }
+    adjustment <- read_excel("data/fish_raw/IPHC/iphc-2024-fiss-hadj.xlsx")
+    dat_IPHC <- IPHC(catch, adjustment, spc, sci_name)
+    if(nrow(dat_sub)>0){
+    dat_sub <- bind_rows(dat_sub, dat_IPHC)
+    } else {
+      dat_sub <- dat_IPHC
+      dat_sub$event_id <- NA
+    }
+    
+  }
+  
+  #Add in mean weight per haul & proportional catch by size
+  df1 <- try(length_expand_bc2(spc, sci_name))
+  df2 <- try(length_expand_nwfsc2(spc, sci_name))
+  df3 <- try(length_expand_afsc2(spc, sci_name))
+  
+  #Combine
+  # List the data frames
+  dfs <- list(df1 = df1, df2 = df2, df3 = df3)
+  
+  # Filter out the NULL values (non-existing data frames)
+  dfs <- dfs[sapply(dfs, is.data.frame)]
+  
+  # Combine the remaining data frames
+  if (length(dfs) > 0) {
+    combined_df <- bind_rows(dfs)
+  } else {
+    combined_df <- NULL
+  }
+  dat_sub <- left_join(dat_sub, combined_df, by="event_id")
+  
+  #Fill in missing haul weights
+  #Use median weight across hauls of the species if haul is missing the weight
+  dat_sub$haul_weight <- ifelse(is.na(dat_sub$haul_weight), median(dat_sub$haul_weight, na.rm=T), dat_sub$haul_weight)
+  #If no weights at all for the species, use an average mid-size weight from the sablefish paper (# this works for the adult class (0.5 - 6 kg).  for the large adult, adjust)
+  dat_sub$haul_weight <- ifelse(is.na(dat_sub$haul_weight), 2, dat_sub$haul_weight)
+  
+  ###Calculate MI
+  ##Calculate metabolic index
+  #Calculate pO2 from umol kg
+  dat_sub$po2 <- calc_po2_sat(salinity=dat_sub$salinity_psu, temp=dat_sub$temperature_C, depth=dat_sub$depth, oxygen=dat_sub$O2_umolkg, lat=dat_sub$latitude, long=dat_sub$longitude, umol_m3=T, ml_L=F)
+  
+  ##Calculate inverse temp
+  kelvin = 273.15
+  boltz = 0.000086173324
+  tref <- 12
+  dat_sub$invtemp <- (1 / boltz)  * ( 1 / (dat_sub$temperature_C + 273.15) - 1 / (tref + 273.15))
+  
+  ###Calculate Metabolic index 
+  ##Species parameters from Tim's paper
+  #Read table in
+  mi_pars <- read.csv("data/taxa_table.csv")
+  mi_pars$Group <- tolower(mi_pars$Group)
+  mi_pars <- filter(mi_pars,Group==taxa)
+  
+  V <- mi_pars$logV
+  n <- mi_pars$n
+  Eo <- c(mi_pars$Eolow, mi_pars$Eo, mi_pars$Eohigh)
+  Ao <- 1/exp(V)
+  
+  #Abbreviated equation
+  #dat$mi1 <- dat$po2*exp(Eo1* dat$invtemp)
+  #dat$mi2 <- dat$po2*exp(Eo2* dat$invtemp)
+  #dat$mi2 <- dat$po2*exp(Eo2* dat$invtemp)
+  
+  #Calculate each Ao
+  dat_sub$mi1 <- calc_mi(Eo[1], Ao, dat_sub$haul_weight,  n, dat_sub$po2, dat_sub$invtemp)
+  dat_sub$mi2 <- calc_mi(Eo[2], Ao, dat_sub$haul_weight, n, dat_sub$po2, dat_sub$invtemp)
+  dat_sub$mi3 <- calc_mi(Eo[3], Ao, dat_sub$haul_weight, n, dat_sub$po2, dat_sub$invtemp)
+  dat_sub$geometry <- NULL
+  dat_sub <- as.data.frame(dat_sub)
+  saveRDS(dat_sub, file = paste("data/processed_data/fish2/dat_", file_name, ".rds", sep=""))
 }

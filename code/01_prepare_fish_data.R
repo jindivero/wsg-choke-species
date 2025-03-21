@@ -40,7 +40,6 @@ for(i in 1:length(spcs)){
 #To not include IPHC data
 sub_species <- c("sablefish", "pacific cod", "pacific halibut", "yelloweye rockfish", "longnose skate", "big skate", "spiny dogfish", "rougheye rockfish")
 sub <-filter(species, !(common_name %in% sub_species))
-
 spcs <- tolower(sub$common_name)
 sci_names <- tolower(sub$scientific_name)
 taxas <- tolower(sub$MI_Taxa)

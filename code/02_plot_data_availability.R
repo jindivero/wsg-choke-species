@@ -13,7 +13,7 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 source("code/helper_funs.R")
 
 #Load data
-dat <- list.files(path = "data/processed_data/fish", pattern = ".rds", full.names=T) %>%
+dat <- list.files(path = "data/processed_data/fish2", pattern = ".rds", full.names=T) %>%
   map(readRDS) %>% 
   bind_rows()
 
@@ -22,9 +22,6 @@ dat <- list.files(path = "data/processed_data/fish", pattern = ".rds", full.name
 #Remove any rows with necessary data missing
 dat <- dat %>%
   drop_na(depth, mi1, temperature_C, salinity_psu, X, Y, year)
-
-dat <- dat %>%
-  drop_na(depth, X, Y, year)
 
 #Remove weird depths
 dat <- filter(dat, depth>0)
@@ -49,15 +46,12 @@ dat <- unique(dat)
 test <- subset(dat, dat$survey_type!="IPHC longline")
 
 # Check that there are some zeros
-out2 = tapply( test[,'cpue_kg_km2'], INDEX=list(test[,'region'],test[,'common_name']), FUN=length )
+out2 = tapply( test[,'catch_weight'], INDEX=list(test[,'region'],test[,'common_name']), FUN=length )
 #PASSES
-
-# Check that there's some zeros
-out = tapply( test[,'cpue_kg_km2'], INDEX=list(test[,'region'],test[,'common_name']), FUN=function(x){sum(x==0)} )
 
 ## For IPHC
 test <- subset(dat, dat$survey_type=="IPHC longline")
-out2 = tapply( test[,'cpue_kg_km2'], INDEX=list(test[,'region'],test[,'common_name']), FUN=length )
+out2 = tapply( test[,'cpue_weight'], INDEX=list(test[,'region'],test[,'common_name']), FUN=length )
 #PASSES
 
 #Region labels
@@ -71,9 +65,9 @@ theme_update(panel.grid.major = element_blank(),
              panel.grid.minor = element_blank(),
              strip.background = element_blank())
 ##Plot barplot of all data available--for diagnostics
-ggplot(filter(dat, survey!="iphc"&cpue_kg_km2>0), aes(x=year))+
+ggplot(filter(dat, survey!="iphc"&catch_weight>0), aes(x=year))+
   stat_count(aes(fill=region))+  
-  facet_wrap("common_name", ncol=2, scales="free_y")+
+  facet_wrap("common_name", ncol=3, scales="free_y")+
   scale_x_continuous(breaks=c(2000,2010,2020), limits=c(2000,2027))+
   xlab("Year")+
   ylab("Number of Observations")+
