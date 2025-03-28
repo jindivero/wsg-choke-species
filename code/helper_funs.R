@@ -41,12 +41,16 @@ calc_po2_sat <- function(salinity, temp, depth, oxygen, lat, long, umol_m3, ml_L
   
 }
 
-calc_mi <- function(Eo, Ao, W, n,po2, inv.temp) {
+calc_mi <- function(Eo, Ao, W, n,po2, inv.temp, fancy) {
+  if(fancy==T){
   mi = W^n*Ao*po2 *exp(Eo * inv.temp)
+  } else {
+    mi = po2 *exp(Eo * inv.temp)
+  }
   return(mi)
 }
 
-calc_po2_crit <- function(inv.temp, taxa, mi, body_size, model) {
+calc_po2_crit <- function(inv.temp, taxa, mi, body_size, model, fancy) {
   W <- body_size
   inv.temp <- inv.temp
   ###Calculate Metabolic index 
@@ -63,8 +67,12 @@ calc_po2_crit <- function(inv.temp, taxa, mi, body_size, model) {
 
   Ao <- 1/exp(V)
   n <- n
-  Eo <-  if(model=="model3") Eo[1] else if(model=="model4") Eo[2] else Eo[3]
+  Eo <-  if(model=="model3"|model=="model9") Eo[1] else if(model=="model4"|model=="model10") Eo[2] else Eo[3]
+  if(fancy==T){
   po2 = mi/(W^n*Ao*exp(Eo * inv.temp))
+  } else{
+    po2 = mi/(exp(Eo * inv.temp)) 
+  }
   return(po2)
 }
 
@@ -114,7 +122,7 @@ length_expand_nwfsc2 <- function(spc, sci_name){
   bio$common_name <- tolower(bio$common_name)
   bio$event_id = as.numeric(bio$trawl_id)
   bio$common_name <- ifelse(bio$common_name=="pacific spiny dogfish", "spiny dogfish", bio$common_name)
-  
+
  bio_sub = dplyr::filter(bio, common_name == spc)
  #If there is weight or length data present in data, get haul mean of weight
  if(nrow(bio_sub)>0) {
@@ -1676,7 +1684,7 @@ prepare_data <- function(spc,sci_name,mi,iphc, file_name, taxa){
 }
 
 ##Function to get separate species
-prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
+prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name, fancy){
   #Filter species
   dat_sub<- filter(dat, common_name==spc)
   
@@ -1689,12 +1697,13 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
     catch$scientific_name <- tolower(catch$scientific_name)
     #Fix dogfish
     catch$common_name <- ifelse(catch$common_name=="pacific spiny dogfish", "spiny dogfish", catch$common_name)
+    catch$common_name <- ifelse(grepl("rougheye", catch$common_name), "rougheye rockfish", catch$common_name)
     #Filter to species
     catch = dplyr::filter(catch, scientific_name == sci_name)
     if(nrow(catch)>0){
-    # prepare data and models -------------------------------------------------
-    catch$event_id <- catch$trawl_id
-    
+    catch$event_id <- as.numeric(catch$trawl_id)
+    catch$latitude <- catch$latitude_dd
+    catch$longitude <- catch$longitude_dd
     # UTM transformation
     dat_ll = catch
     sp::coordinates(dat_ll) <- c("longitude_dd", "latitude_dd")
@@ -1707,20 +1716,22 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
     catch = dplyr::rename(catch, X = coords.x1,
                         Y = coords.x2)
     catch$scientific_name <- sci_name
-    catch$depth <- dat$depth_m
+    catch$depth <- catch$depth_m
     catch$survey <- "nwfsc"
     catch$region <- "cc"
     catch$survey_name <- catch$project
     #Convert to per hectare 
     catch$catch_weight <- catch$cpue_kg_km2/100
     catch$catch_numbers <- catch$total_catch_numbers/catch$area_swept_ha
-    catch$latitude <- catch$latitude_dd
-    catch$longitude <- catch$longitude_dd
-    dat_sub1 <- dplyr::select(catch, event_id, common_name, scientific_name, survey_name, vessel, tow, year, longitude, latitude, catch_weight, catch_numbers,
-                         depth)
+    dat_sub1 <-dplyr::select(catch, event_id, common_name, scientific_name, survey_name, survey, region, year, catch_weight, catch_numbers, longitude, latitude, X, Y,
+                             depth)
     rm(catch)
     gc()
+    }  else {
+      dat_sub1 <- NULL
+      rm(catch)
     }
+
     ##BC
     catch <- readRDS("data/fish_raw/BC/pbs-catch.rds")
     haul <- readRDS("data/fish_raw/BC/pbs-haul.rds")
@@ -1728,6 +1739,7 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
     catch <- left_join(catch,itis)
     #Rename dogfish
     catch$common_name <- ifelse(catch$common_name=="north pacific spiny dogfish", "spiny dogfish", catch$common_name)
+    catch$common_name <- ifelse(grepl("rougheye", catch$common_name), "rougheye rockfish", catch$common_name)
     
     #Combine catch data with haul data
     catch <- dplyr::left_join(catch, haul, relationship = "many-to-many")
@@ -1754,12 +1766,16 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
     catch$region <- "bc"
     catch$longitude <- catch$lon_start
     catch$latitude <- catch$lat_start
+    catch$depth <- catch$depth_m
     dat_sub2 <- dplyr::select(catch, event_id, common_name, scientific_name, survey_name, survey, region, year, catch_weight, catch_numbers, longitude, latitude,
-                           depth)
+                           depth, X, Y)
     rm(catch)
     gc()
+    }else {
+      dat_sub2 <- NULL
+      rm(catch)
     }
-    
+
   #AFSC
   bio2 <-readRDS("data/fish_raw/NOAA/ak_bts_goa_ebs_nbs_indivero_all_levels.RDS")
   catch <-readRDS("data/fish_raw/NOAA/ak_bts_goa_ebs_nbs_indivero_cpue_zerofilled.RDS")
@@ -1769,6 +1785,8 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
   species$species_name <- tolower(species$species_name)
   species$common_name <- tolower(species$common_name)
   catch <- dplyr::left_join(catch, species)
+  catch$common_name <- ifelse(catch$common_name=="north pacific spiny dogfish", "spiny dogfish", catch$common_name)
+  catch$common_name <- ifelse(grepl("rougheye", catch$common_name), "rougheye rockfish", catch$common_name)
   
   catch <- filter(catch, common_name==spc)
   
@@ -1776,12 +1794,11 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
   catch$longitude <- catch$longitude_dd_start
   catch$latitude <- catch$latitude_dd_start
   catch$scientific_name <- catch$species_name
-  catch$event_id <- catch$hauljoin
+  catch$event_id <- as.numeric(catch$hauljoin)
   catch$depth <- catch$depth_m
   catch$catch_weight <- catch$cpue_kgkm2/100
   catch$catch_numbers <- catch$count
   catch$region <- tolower(catch$survey)
-  
   # UTM transformation
   dat_ll = catch
   sp::coordinates(dat_ll) <- c("longitude", "latitude")
@@ -1794,15 +1811,17 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
   catch = dplyr::rename(catch, X = coords.x1,
                       Y = coords.x2)
   catch$latitude <- catch$latitude_dd_start
-  catch$longitude <- catch$long_dd_start
+  catch$longitude <- catch$longitude_dd_start
   dat_sub3 <- dplyr::select(catch, event_id, common_name, scientific_name,survey, region, year, catch_weight, catch_numbers, longitude, latitude,
-                            depth)
+                            depth, X, Y)
   rm(catch)
   gc()
+  } else {
+    dat_sub3 <- NULL
   }
   #Combine which exist
   # List the data frames
-  dfs <- list(df1 = dat_sub1, df2 = datsub2, df3 = datsub3)
+  dfs <- list(df1 = dat_sub1, df2 = dat_sub2, df3 = dat_sub3)
   
   # Filter out the NULL values (non-existing data frames)
   dfs <- dfs[sapply(dfs, is.data.frame)]
@@ -1810,6 +1829,14 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
   # Combine the remaining data frames
   if (length(dfs) > 0) {
     dat_sub <- bind_rows(dfs)
+    #Combine with in situ data
+    insitu <- readRDS("data/processed_data/o2/insitu_combined.rds")
+    #Remove IPHC, because this is already in the IPHC fish catch data
+    insitu <- filter(insitu, survey!="iphc")
+    insitu <- unique(insitu)
+    #Just columns of interest
+    dat_sub <- left_join(dat_sub, insitu[,c("temperature_C", "do_mlpL", "salinity_psu", "sigma0_kgm3", "O2_umolkg", "event_id")], by="event_id")
+    
   } else {
     dat_sub <- NULL
   }
@@ -1849,10 +1876,11 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
   # Combine the remaining data frames
   if (length(dfs) > 0) {
     combined_df <- bind_rows(dfs)
+    dat_sub <- left_join(dat_sub, combined_df, by="event_id")
   } else {
     combined_df <- NULL
+    dat_sub$haul_weight <- NA
   }
-  dat_sub <- left_join(dat_sub, combined_df, by="event_id")
   
   #Fill in missing haul weights
   #Use median weight across hauls of the species if haul is missing the weight
@@ -1889,10 +1917,228 @@ prepare_data2 <- function(full_data, spc, sci_name, taxa, iphc, file_name){
   #dat$mi2 <- dat$po2*exp(Eo2* dat$invtemp)
   
   #Calculate each Ao
-  dat_sub$mi1 <- calc_mi(Eo[1], Ao, dat_sub$haul_weight,  n, dat_sub$po2, dat_sub$invtemp)
-  dat_sub$mi2 <- calc_mi(Eo[2], Ao, dat_sub$haul_weight, n, dat_sub$po2, dat_sub$invtemp)
-  dat_sub$mi3 <- calc_mi(Eo[3], Ao, dat_sub$haul_weight, n, dat_sub$po2, dat_sub$invtemp)
+  dat_sub$mi1 <- calc_mi(Eo[1], Ao, dat_sub$haul_weight,  n, dat_sub$po2, dat_sub$invtemp, fancy)
+  dat_sub$mi2 <- calc_mi(Eo[2], Ao, dat_sub$haul_weight, n, dat_sub$po2, dat_sub$invtemp, fancy)
+  dat_sub$mi3 <- calc_mi(Eo[3], Ao, dat_sub$haul_weight, n, dat_sub$po2, dat_sub$invtemp, fancy)
   dat_sub$geometry <- NULL
   dat_sub <- as.data.frame(dat_sub)
   saveRDS(dat_sub, file = paste("data/processed_data/fish2/dat_", file_name, ".rds", sep=""))
 }
+
+lookup_taxa_t <- function(taxa.name, t.range, w.2.use) {
+  all.dat <- load_data()
+  #do the usual filtering of data
+  all.dat <- filter_dat(all.dat)
+  wref <- 5
+  tref <- 15
+  kb <-  8.617333262145E-5
+  sim_beta <- readRDS("analysis/taxa_sims.RDS")
+  ltaxa.name <- tolower(taxa.name)
+  taxa.name<- tolower(taxa.name)
+  lookup.taxa <- ltaxa.name %in% tolower(sim_beta$Group)
+  sim_beta$Group <- tolower(sim_beta$Group)
+  if(!lookup.taxa){
+    ltaxa.name <- "teleostei"
+    lookup.taxa <- ltaxa.name %in% tolower(sim_beta$Group)
+    taxa.name<- ltaxa.name
+  }
+  
+  if(lookup.taxa) {
+    options(warn = -1)
+    sims <- dplyr::filter(sim_beta, Group == taxa.name)
+    if (sims$level[1] == 1) taxa_dat <- dplyr::filter(all.dat, tolower(Class) == ltaxa.name)
+    if (sims$level[1] == 2) taxa_dat <- dplyr::filter(all.dat, tolower(Order) == ltaxa.name)
+    if (sims$level[1] == 3) taxa_dat <- dplyr::filter(all.dat, tolower(Family) == ltaxa.name)
+  }
+  
+  Wmed <- median(w.2.use/ wref)
+  
+  pcrit_df <- tibble(Temp = NA, 
+                     Pcritlower90 = NA,
+                     Pcritupper90= NA,
+                     Pcritlower50 = NA,
+                     Pcritupper50= NA)
+  
+  for (i in seq_along(t.range)) {
+    # calculate Pcrit for given temperature
+    inv.temp <- (1 / kb) * (1 / kelvin(t.range[i]) - 1 / kelvin(tref) )
+    pcrit <- sims$logV - sims$n * log(Wmed) - sims$Eo * inv.temp
+    pcrit_90 <- get_x_range(x = exp(pcrit), p = 0.9)
+    pcrit_50 = get_x_range(x = exp(pcrit), p = 0.5)
+    pcrit_df <- pcrit_df %>% add_row(Temp = t.range[i],
+                                     Pcritlower90 = pcrit_90[1], 
+                                     Pcritupper90 = pcrit_90[2],
+                                     Pcritlower50 = pcrit_50[1],
+                                     Pcritupper50 = pcrit_50[2]
+    )
+    
+  }
+  # delete placeholder NA row
+  pcrit_df <- na.omit(pcrit_df)
+  # smooth lower and upper bounnds
+  lower90mod = gam(Pcritlower90~ s(Temp), data = pcrit_df)
+  pcrit_df$lower90s = predict.gam(lower90mod, data = pcrit_df)
+  upper90mod = gam(Pcritupper90~ s(Temp), data = pcrit_df)
+  pcrit_df$upper90s = predict.gam(upper90mod, data = pcrit_df)
+  
+  lower50mod = gam(Pcritlower50~ s(Temp), data = pcrit_df)
+  pcrit_df$lower50s = predict.gam(lower50mod, data = pcrit_df)
+  upper50mod = gam(Pcritupper50~ s(Temp), data = pcrit_df)
+  pcrit_df$upper50s = predict.gam(upper50mod, data = pcrit_df)
+  
+  
+  return(pcrit_df)
+} 
+
+# master function to solve for the density that produces a tail probability equal
+# to target, and to give the limits of that range (the inner p percentile interval)
+get_x_range <- function(x, p) {
+  dens <- uniroot(f = fit_dens, interval = c(0.01, 1), x = x, p = p)
+  smooth <- bkde (x)
+  index <- which(smooth$y >=dens$root)
+  xbounds = c(min(smooth$x[index]), max(smooth$x[index]))
+  return(xbounds)
+}
+# Functions for calculating credibility interval
+# function to return the probability in the tails below a theshold density
+getprob <- function(dens, x) {
+  smooth <- bkde (x)
+  deltax <- diff(smooth$x)[1]
+  # turn into probability
+  probs <- smooth$y * deltax
+  index <- which(smooth$y <dens)
+  return(sum(probs[index]))
+}
+# function to get the difference between tail probability and target probability
+fit_dens <- function(dens, x, p) {
+  pstar <- getprob(dens, x)
+  target_p <- 1 - p
+  return(target_p - pstar)
+}
+
+# packages that might not be installed - install any not already installed
+packages <- c("devtools", "rfishbase", "gsw")
+install.packages(setdiff(packages, rownames(installed.packages())))
+library(dplyr)
+library(devtools)
+library(gsw)
+library(readxl)
+library(stringr)
+library(lubridate)
+library(sf)
+
+calc_po2_sat <- function(salinity, temp, depth, oxygen, lat, long, umol_m3, ml_L) {
+  # Input:       S = Salinity (pss-78)
+  #              T = Temp (deg C) ! use potential temp
+  #depth is in meters
+  
+  #Pena et al. ROMS and GLORYS are in mmol per m^3 (needs to be converted to umol per kg) (o2 from trawl data was in mL/L, so had to do extra conversions)
+  gas_const = 8.31
+  partial_molar_vol = 0.000032
+  kelvin = 273.15
+  boltz = 0.000086173324
+  
+  #convert mmol to umol
+  umol_m3 <- oxygen*1000
+  #convert m3 to l
+  umol_l <- umol_m3/1000
+  #convert from molality (moles per volume) to molarity (moles per mass)
+  #1 L of water = 1 kg of water, so no equation needed?? Right??
+  o2_umolkg <- umol_l * 1/1
+  
+  SA = gsw_SA_from_SP(salinity,depth,long,lat) #absolute salinity for pot T calc
+  pt = gsw_pt_from_t(SA,temp,depth) #potential temp at a particular depth
+  #this is for if using data that has oxygen in ml/L
+  #CT = gsw_CT_from_t(SA,temp,depth) #conservative temp
+  #sigma0 = gsw_sigma0(SA,CT)
+  # o2_umolkg = oxygen*44660/(sigma0+1000)
+  
+  O2_Sat0 = gsw_O2sol_SP_pt(salinity,pt)
+  
+  #= o2satv2a(sal,pt) #uses practical salinity and potential temp - solubity at p =1 atm
+  press = exp(depth*10000*partial_molar_vol/gas_const/(temp+kelvin))
+  O2_satdepth = O2_Sat0*press
+  
+  #solubility at p=0
+  sol0 = O2_Sat0/0.209
+  sol_Dep = sol0*press
+  po2 = o2_umolkg/sol_Dep
+  po2 <- po2 * 101.325 # convert to kPa
+  return(po2)
+  
+}
+
+# calc o2 solubility, relies on o2 in umol/kg
+gsw_O2sol_SP_pt <- function(sal,pt) {
+  x = sal
+  pt68 = pt*1.00024
+  y = log((298.15 - pt68)/(273.15 + pt68))
+  
+  a0 =  5.80871
+  a1 =  3.20291
+  a2 =  4.17887
+  a3 =  5.10006
+  a4 = -9.86643e-2
+  a5 =  3.80369
+  b0 = -7.01577e-3
+  b1 = -7.70028e-3
+  b2 = -1.13864e-2
+  b3 = -9.51519e-3
+  c0 = -2.75915e-7
+  
+  O2sol = exp(a0 + y*(a1 + y*(a2 + y*(a3 + y*(a4 + a5*y)))) + x*(b0 + y*(b1 + y*(b2 + b3*y)) + c0*x))
+  return(O2sol)
+}
+
+# calc o2 solubility, relies on o2 in umol/kg
+calc_o2_sol <- function(sal, temp, depth, long, lat) {
+  SA = gsw_SA_from_SP(sal,depth,long,lat) #absolute salinity for pot T calc
+  pt = gsw_pt_from_t(SA,temp,depth) #potential temp at a particular depth
+  pt68 = pt*1.00024
+  y = log((298.15 - pt68)/(273.15 + pt68))
+  
+  a0 =  5.80871
+  a1 =  3.20291
+  a2 =  4.17887
+  a3 =  5.10006
+  a4 = -9.86643e-2
+  a5 =  3.80369
+  b0 = -7.01577e-3
+  b1 = -7.70028e-3
+  b2 = -1.13864e-2
+  b3 = -9.51519e-3
+  c0 = -2.75915e-7
+  
+  O2sol = exp(a0 + y*(a1 + y*(a2 + y*(a3 + y*(a4 + a5*y)))) + sal*(b0 + y*(b1 + y*(b2 + b3*y)) + c0*sal))
+  return(O2sol)
+}
+
+calc_sigma <- function(s, t, p) {
+  constants <- list(B0 = 8.24493e-1, B1 = -4.0899e-3, B2 = 7.6438e-5, B3 = -8.2467e-7, B4 = 5.3875e-9, C0 = -5.72466e-3, C1 = 1.0227e-4, C2 = -1.6546e-6, D0 = 4.8314e-4, A0 = 999.842594, A1 = 6.793952e-2, A2 = -9.095290e-3, A3 = 1.001685e-4, A4 = -1.120083e-6, A5 = 6.536332e-9, FQ0 = 54.6746, FQ1 = -0.603459, FQ2 = 1.09987e-2, FQ3 = -6.1670e-5, G0 = 7.944e-2, G1 = 1.6483e-2, G2 = -5.3009e-4, i0 = 2.2838e-3, i1 = -1.0981e-5, i2 = -1.6078e-6, J0 =1.91075e-4, M0 = -9.9348e-7, M1 = 2.0816e-8, M2 = 9.1697e-10, E0 = 19652.21, E1 = 148.4206, E2 = -2.327105, E3 = 1.360477e-2, E4 = -5.155288e-5, H0 = 3.239908, H1 = 1.43713e-3, H2 = 1.16092e-4, H3 = -5.77905e-7, K0 = 8.50935e-5, K1 =-6.12293e-6, K2 = 5.2787e-8)
+  
+  list2env(constants, environment())
+  constant_names <- names(constants)
+  t2 = t*t
+  t3 = t*t2
+  t4 = t*t3
+  t5 = t*t4
+  #  if (s <= 0.0) s = 0.000001
+  s32 = s^ 1.5
+  p = p / 10.0 # convert decibars to bars */
+  sigma = A0 + A1*t + A2*t2 + A3*t3 + A4*t4 + A5*t5 + (B0 + B1*t + B2*t2 + B3*t3 + B4*t4)*s + (C0 + C1*t + C2*t2)*s32 + D0*s*s
+  kw = E0 + E1*t + E2*t2 + E3*t3 + E4*t4
+  aw = H0 + H1*t + H2*t2 + H3*t3
+  bw = K0 + K1*t + K2*t2
+  k = kw + (FQ0 + FQ1*t + FQ2*t2 + FQ3*t3)*s + (G0 + G1*t + G2*t2)*s32 + (aw + (i0 + i1*t + i2*t2)*s + (J0*s32))*p + (bw + (M0 + M1*t + M2*t2)*s)*p*p
+  val = 1 - p / k
+  sigma = sigma / val - 1000.0
+  rm(constant_names)
+  return(sigma)
+}
+
+# convert ml /l to umol / kg
+convert_o2 <- function(o2ml_l, sigma){
+  (o2ml_l * 44.660)/((1000 + sigma)/1000)
+}
+
+rsq <- function(x, y) cor(x,y) * cor(x,y)

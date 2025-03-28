@@ -29,7 +29,7 @@ if(data_type){
   output_folder <- "data_type"
 }
 if(region_comp){
-  aic <- as.data.frame(read.csv("output/region_comp/aic_table_region_comp_priors_goodonly.csv"))
+  aic <- as.data.frame(read_excel("output/region_comp/aic_table_region_comp_priors_goodonly.xlsx"))
   output_folder <- "region_comp"
 }
 
@@ -44,7 +44,7 @@ taxa$common_name <- tolower(taxa$common_name)
 #Range of temps
 ##Create sequence of metabolic index values for marginal effects, so same for all
 #Load data
-files <- list.files(path = "data/processed_data/fish", pattern = ".rds", full.names=T)
+files <- list.files(path = "data/processed_data/fish2", pattern = ".rds", full.names=T)
 dat <- map(files,readRDS)
 dat <- bind_rows(dat)
 
@@ -66,12 +66,13 @@ for(i in 1:length(species)) {
   this_species = species[i]
   print(this_species)
   this_aic <- as.data.frame(filter(aic, species==this_species))
+  this_aic$data.type <- this_aic[,"data type"]
   dat_names <- unique(this_aic$data.type)
   for(h in 1:length(dat_names)){
     this_dat <- dat_names[h]
     this_data <- as.data.frame(filter(this_aic, data.type==this_dat))
     #Identify if MI is best-fitting model and pull that model
-    mi_models <- this_data[c("model3", "model4", "model5")]
+    mi_models <- this_data[c("model9", "model10", "model11")]
     #If any cells are equal to 0
     if(any(mi_models==0 & !is.na(mi_models))){
       #Extract the name of the column which equals 0 
@@ -83,15 +84,19 @@ for(i in 1:length(species)) {
       #Pull the data file
       this_datframe <- try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
       #Calculate mean of this_datframe$mi based on best model
-      mean_mi <- if(best_model=="model3") mean(this_datframe$mi1) else if(best_model=="model4") mean(this_datframe$mi2) else mean(this_datframe$mi3)
-      sd_mi <-   if(best_model=="model3") sd(this_datframe$mi1) else if(best_model=="model4") sd(this_datframe$mi2) else sd(this_datframe$mi3)
+      mean_mi <- if(best_model=="model9") mean(this_datframe$mi1) else if(best_model=="model10") mean(this_datframe$mi2) else mean(this_datframe$mi3)
+      sd_mi <-   if(best_model=="model9") sd(this_datframe$mi1) else if(best_model=="model10") sd(this_datframe$mi2) else sd(this_datframe$mi3)
       #Pull breakpoint and slope
       pars <- as.data.frame(tidy(fit, effects="fixed", conf.int=T))
       slope <- filter(pars, grepl("slope", term))
       thresh <- filter(pars,grepl("breakpt", term))
-      thresh$est <- (thresh$est*sd_mi)+mean_mi
+      thresh$est <- (thresh$estimate*sd_mi)+mean_mi
+      if(thresh$std.error!="NaN"){
       thresh$std.error <- (thresh$std.error*sd_mi)+mean_mi 
-      if(thresh$est>0 & thresh$std.error<10){
+      } else {
+        thresh$std.error <- NA
+      }
+      if(thresh$est>0 & (thresh$std.error<10|is.na(thresh$std.error))){
       if(i==1 & h==1){
         bp_est <- data.frame(species=this_species, data=this_dat, model=best_model, breakpt=thresh$est, breakpt_se=thresh$std.error)
       } else {

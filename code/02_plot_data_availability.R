@@ -67,7 +67,7 @@ theme_update(panel.grid.major = element_blank(),
 ##Plot barplot of all data available--for diagnostics
 ggplot(filter(dat, survey!="iphc"&catch_weight>0), aes(x=year))+
   stat_count(aes(fill=region))+  
-  facet_wrap("common_name", ncol=3, scales="free_y")+
+  facet_wrap("common_name", ncol=4, scales="free_y")+
   scale_x_continuous(breaks=c(2000,2010,2020), limits=c(2000,2027))+
   xlab("Year")+
   ylab("Number of Observations")+
@@ -84,10 +84,10 @@ ggplot(filter(dat, survey=="iphc"), aes(x=year))+
   guides(fill = guide_legend(nrow = 1))
 
 ##Combine IPHC and bottom trawl surveys, positive catch only
-##Plot barplot with IPHC and non
-ggplot(filter(dat, (survey!="iphc" & cpue_kg_km2>0)|(survey=="iphc"&(cpue_weight>0|cpue_count>0))), aes(x=year))+
+##Plot barplot with IPHC and bottom trawl
+ggplot(filter(dat, (survey!="iphc" & catch_weight>0)|(survey=="iphc"&(cpue_weight>0|cpue_count>0))), aes(x=year))+
   stat_count(aes(alpha=survey_type, fill=region))+
-  facet_wrap("common_name", ncol=4, scales="free_y")+
+  facet_wrap("common_name", ncol=4, scales="free_y", labeller=labeller(common_name=label_wrap_gen(10)))+
   scale_x_continuous(breaks=c(2008,2016,2024), limits=c(2008,2026))+
   xlab("Year")+
   ylab("Number of Observations")+
@@ -96,7 +96,7 @@ ggplot(filter(dat, (survey!="iphc" & cpue_kg_km2>0)|(survey=="iphc"&(cpue_weight
   scale_alpha_manual(values=c(0.4,1))
 
 ggsave(
-  paste("output/plots/dat_availability/barplot_all.png"),
+  paste("output/plots/dat_availability/barplot_positiveonly_all.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -109,7 +109,7 @@ ggsave(
 )
 
 ##With zeroes
-ggplot(filter(dat, (survey!="iphc" & cpue_kg_km2>0)|(survey=="iphc"& (cpue_count>0|cpue_weight>0))), aes(x=year))+
+ggplot(filter(dat, (survey!="iphc" & catch_weight>0)|(survey=="iphc"& (cpue_count>0|cpue_weight>0))), aes(x=year))+
   stat_count(dat, mapping=aes(x=year), fill="grey", alpha=0.3)+
   stat_count(aes(alpha=survey_type, fill=region))+
   facet_wrap("common_name", ncol=4, scales="free_y")+
@@ -118,7 +118,8 @@ ggplot(filter(dat, (survey!="iphc" & cpue_kg_km2>0)|(survey=="iphc"& (cpue_count
   ylab("Number of Observations")+
   theme(legend.position="top")+
   guides(fill = guide_legend(nrow = 1), alpha="none")+
-  scale_alpha_manual(values=c(0.5,1))
+  scale_alpha_manual(values=c(0.5,1))+
+  theme(strip.text=element_text(size=10))
 
 
 ggsave(
@@ -135,7 +136,7 @@ ggsave(
 )
 
 ##With zeroes--bottom trawl only
-ggplot(filter(dat, (survey!="iphc" & cpue_kg_km2>0)), aes(x=year))+
+ggplot(filter(dat, (survey!="iphc" & catch_weight>0)), aes(x=year))+
   stat_count(filter(dat, (survey!="iphc")), mapping=aes(x=year), fill="grey", alpha=0.3)+
   stat_count(aes(fill=region))+
   facet_wrap("common_name", ncol=4, scales="free_y")+
@@ -171,13 +172,14 @@ us_coast_proj <- sf::st_transform(map_data, crs = 32610)
 ###Map of data available
 species <- unique(dat$common_name)
 for(i in 1:length(species)){
-dat2plot <- filter(dat, common_name==species[i]&((survey!="iphc" & cpue_kg_km2>0)|(survey=="iphc"& (cpue_count>0|cpue_weight>0))))
+dat2plot <- filter(dat, common_name==species[i]&((survey!="iphc" & catch_weight>0)|(survey=="iphc"& (cpue_count>0|cpue_weight>0))))
 ggplot(us_coast_proj) + geom_sf() +
   xlim(min(dat2plot$X)*1000, max(dat2plot$X)*1000)+
   ylim(min(dat2plot$Y)*1000, max(dat2plot$Y)*1000)+
+  theme(axis.text.x=element_blank())+
   geom_point(dat2plot, mapping=aes(x=X*1000, y=Y*1000,colour=survey))+
   facet_wrap("year", ncol=7)+
-  theme_minimal(base_size=20)+
+  theme_minimal(base_size=12)+
   xlab("Longitude")+
   ylab("Latitude")+
   ggtitle(paste(unique(dat2plot$common_name)))
@@ -223,9 +225,9 @@ ggsave(
 
 ##Make a table
 #Number of positive catches per species per region
-table <- dat %>% filter(survey_type!="iphc" & cpue_kg_km2>0)%>% 
+table <- dat %>% filter(survey_type!="iphc" & catch_weight>0)%>% 
   group_by(common_name, region) %>% 
-  summarize(N_pos = length(cpue_kg_km2))
+  summarize(N_pos = length(catch_weight))
 table <- pivot_wider(table, names_from=region, id_cols=common_name, values_from=c(N_pos))
 #Species table
 species <- read_excel("data/species_table.xlsx")

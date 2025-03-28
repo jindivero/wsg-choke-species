@@ -18,9 +18,9 @@ dat <- get_data()
 
 #Load functions
 source("code/helper_funs.R")
-source("code/util_funs.R")
 
 dat$common_name <- ifelse(dat$common_name=="pacific spiny dogfish", "spiny dogfish", dat$common_name)
+dat$common_name <- ifelse(grepl("rougheye", dat$common_name), "rougheye rockfish", dat$common_name)
 dat$latitude <- dat$lat_start
 dat$longitude <- dat$lon_start
 dat$depth <- dat$depth_m
@@ -80,14 +80,18 @@ spcs <- tolower(sub$common_name)
 sci_names <- tolower(sub$scientific_name)
 taxas <- tolower(sub$MI_Taxa)
 file_names <- spcs
+
+#Do the full MI equation (fancy=T) or the abbreviated (just Eo; fancy=F)
+fancy <- F
 #Ones to include IPHC data
-for(i in 7:length(spcs)){
+for(i in 1:length(spcs)){
   spc <- spcs[i]
   print(spc)
   sci_name <- sci_names[i]
   file_name <- file_names[i]
   taxa <- taxas[i]
-  try(prepare_data2(dat, spc=spc, sci_name=sci_name, iphc=T, file_name=file_name, taxa=taxa))
+  try(prepare_data2(dat, spc=spc, sci_name=sci_name,  taxa=taxa, iphc=T, file_name=file_name,fancy=fancy))
+  gc()
 }
 
 #To not include IPHC data
@@ -104,7 +108,7 @@ for(i in 1:length(spcs)){
   sci_name <- sci_names[i]
   file_name <- file_names[i]
   taxa <- taxas[i]
-  try(prepare_data2(full_data=dat, spc=spc, sci_name=sci_name, taxa=taxa, iphc=F, file_name=file_name))
+  try(prepare_data2(full_data=dat, spc=spc, sci_name=sci_name, taxa=taxa, iphc=F, file_name=file_name, fancy))
   gc()
   
 }
