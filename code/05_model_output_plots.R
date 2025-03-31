@@ -44,6 +44,8 @@ if(iphc){
   dat_names <- c("cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
   species <- c("sablefish", "pacific cod", "pacific halibut", "yelloweye rockfish", "longnose skate", "big skate", "spiny dogfish", "rougheye rockfish")
 }
+#Output folder
+output_folder <- "region_comp"
 
 ##Pull data for each species and plot
 for(i in 1:length(species)) {
@@ -52,7 +54,7 @@ for(i in 1:length(species)) {
   for(h in 1:length(dat_names)){
     this_dat <- dat_names[h]
     print(this_dat)
-     dat <- try(readRDS(file = paste0("output/region_comp/", this_species, "_", this_dat, "_dat.rds")))
+     dat <- try(readRDS(file = paste0("output/",output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
     if(is.data.frame(dat2plot)){
     ggplot(us_coast_proj) + geom_sf() +
       geom_point(filter(dat2plot,catch_weight>0),mapping=aes(x=X*1000, y=Y*1000,colour=survey), size=0.1)+
@@ -87,11 +89,11 @@ for(i in 1:length(species)) {
 #Load AIC table for model output
 #Data type comparison
 if(iphc){
-aic <- as.data.frame(read_excel("output/region_comp/aic_table_region_comp_priors_goodonly_iphc.xlsx"))
+aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx"))
 output_folder <- "region_comp"
 }
 if(!iphc){
-aic <- as.data.frame(read_excel("output/region_comp/aic_table_region_comp_priors_goodonly.xlsx"))
+aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx")))
 output_folder <- "region_comp"
 }
 

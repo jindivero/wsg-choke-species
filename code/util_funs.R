@@ -50,11 +50,6 @@ calc_po2_sat <- function(salinity, temp, depth, oxygen, lat, long, umol_m3, ml_L
 
 }
 
-calc_mi <- function(Eo, Ao, W, n,po2, inv.temp) {
-  mi = W^n*Ao*po2 *exp(Eo * inv.temp)
-  return(mi)
-}
-
 # calc o2 solubility, relies on o2 in umol/kg
 gsw_O2sol_SP_pt <- function(sal,pt) {
   x = sal

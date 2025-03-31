@@ -21,6 +21,26 @@ files <- list.files(path = "data/processed_data/fish2", pattern = ".rds", full.n
 dat <- map(files,readRDS)
 dat <- bind_rows(dat)
 
+#remove iphc
+remove_iphc <- T
+if(remove_iphc){
+  dat <- filter(dat, survey!="iphc")
+}
+
+#Remove weird depths
+dat <- filter(dat, depth>0)
+dat_depth <- filter(dat_depth, depth>0)
+
+#Remove oxygen outliers
+dat <- filter(dat, O2_umolkg<1500)
+
+dat <- dat  %>%
+  drop_na(depth,year, mi1,mi2,mi3, X, Y, catch_weight)
+
+#More complete dataframe for filtering depth
+dat_depth <- dat
+
+
 #Combine NBS & EBS into a BS region?
 combine_bs <- F
 if(combine_bs){
@@ -39,22 +59,6 @@ if(remove_ai){
   dat <- filter(dat, region!="ai")
 }
 
-#remove iphc
-remove_iphc <- T
-if(remove_iphc){
-  dat <- filter(dat, survey!="iphc")
-}
-
-#Remove other missing rows
-dat <- dat  %>%
-  drop_na(depth,year, mi1,mi2,mi3, X, Y, catch_weight)
-
-#Remove weird depths
-dat <- filter(dat, depth>0)
-
-#Remove oxygen outliers
-dat <- filter(dat, O2_umolkg<1500)
-
 ##Species to do--full list
 species <- c(unique(dat$common_name))
 
@@ -68,9 +72,14 @@ dat <- filter(dat, year>=2003)
 dat <- dat %>%
   mutate(across('survey', str_replace, 'EBS', 'afsc_bsai'),across('survey', str_replace, 'GOA', 'afsc_goa') )
 
-
 #Spatio-temporal variation
 spatio_temp <- F
+
+#Filter depths?
+filter_depth <- F
+
+#Name of output folder
+output_folder <- "region_comp_nodepth"
 
 #fit models
 for (h in 1:length(species)) {
@@ -85,6 +94,32 @@ for (h in 1:length(species)) {
   #Rename column
   dat.2.use$catch <- dat.2.use$catch_weight
   
+  #Get depth habitat
+  if(filter_depth){
+    dat_depth2 <- filter(dat_depth, common_name==this_species)
+    dat_depth2 <- dat_depth2  %>% drop_na(depth, catch_weight)
+    
+   # Sort by depth
+    dat_depth2 <- dat_depth2[order(dat_depth2$depth), ]
+    
+    #Calculate the cumulative sum of catch by depth
+    dat_depth2$cumsum_catch <- cumsum(dat_depth2$catch_weight)
+    
+    #Calculate the proportional cumulative sum
+    dat_depth2$prop_cumsum_catch <- dat_depth2$cumsum_catch / sum(dat_depth2$catch_weight, na.rm=T)
+    
+    # Find the index of the closest value to 98% (0.97) in prop_cumsum_var1
+    closest_index <- which.min(abs(dat_depth2$prop_cumsum_catch - 0.99))
+    
+    # Get the depth at 97% catch
+    closest_value <- dat_depth2$depth[closest_index]
+    
+    #Print
+    print(paste("Depth filtered to", closest_value, "m"))
+    dat.2.use$species_depth_habitat <- closest_value
+    
+    dat.2.use <- filter(dat.2.use, depth<closest_value)
+  }
   ##Separate out regions for 
   #Make list to store filtered data
   subs <- list()
@@ -172,7 +207,7 @@ for (h in 1:length(species)) {
     
     models <- c("m7", "m8", "m9","m10", "m11", "m12")
     
-    saveRDS(sub, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_dat.rds"))
+    saveRDS(sub, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_dat.rds"))
     
     # Model 7: null
     print(paste(this_species))
@@ -184,8 +219,10 @@ for (h in 1:length(species)) {
       formula = "catch ~ -1 + region+ year+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
+        formula = "catch ~ -1 + region+ year+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
+        formula = "catch ~ -1 + region +log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     start = Sys.time()
@@ -205,7 +242,7 @@ for (h in 1:length(species)) {
      # extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
     ))
     print( Sys.time() - start )
-    saveRDS(m7, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model7.rds"))
+    saveRDS(m7, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model7.rds"))
     
     # Model 8: quadratic temp (uniform across regions)
     print("fitting m8")
@@ -213,11 +250,12 @@ for (h in 1:length(species)) {
       formula =  "catch ~ 1+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
-      formula ="catch ~ -1 + region +temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
+        formula ="catch ~ -1 + region+year+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
+        formula ="catch ~ -1 + region+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     start = Sys.time()
@@ -237,7 +275,7 @@ for (h in 1:length(species)) {
      # extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
     ))
     print( Sys.time() - start )
-    saveRDS(m8, file = paste0("output/region_comp/", this_species,  "_", dat_names[i],"_model8.rds"))
+    saveRDS(m8, file = paste0("output/",output_folder, "/", this_species,  "_", dat_names[i],"_model8.rds"))
     
     # Model 9: breakpoint MI low
     print("fitting m9")
@@ -245,11 +283,12 @@ for (h in 1:length(species)) {
       formula =   "catch ~ 1 +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
-      formula = "catch ~ -1 + region +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
+        formula = "catch ~ -1 + region+year +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
+        formula = "catch ~ -1 + region +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     start = Sys.time()
@@ -269,7 +308,7 @@ for (h in 1:length(species)) {
       #extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
     ))
     print( Sys.time() - start )
-    saveRDS(m9, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model9.rds"))
+    saveRDS(m9, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model9.rds"))
     
     # Model 10: Breakpoint(mi median)
     print("fitting m10")
@@ -278,11 +317,12 @@ for (h in 1:length(species)) {
       formula =   "catch ~ 1 +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
-      formula =  "catch ~ -1 + region +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
+        formula =  "catch ~ -1 + region+year +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
+        formula =  "catch ~ -1 + region +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m10 <-try(sdmTMB(
@@ -301,7 +341,7 @@ for (h in 1:length(species)) {
      # extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
     ))
     print( Sys.time() - start )
-    saveRDS(m10, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model10.rds"))
+    saveRDS(m10, file = paste0("output/",output_folder, "/",this_species, "_", dat_names[i], "_model10.rds"))
     
     # Model 11: breakpoint(mi high)
     print("fitting m11")
@@ -310,11 +350,12 @@ for (h in 1:length(species)) {
       formula =   "catch ~ 1 +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
-      formula =  "catch ~ -1 + region +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
+        formula =  "catch ~ -1 + region+year +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
+        formula =  "catch ~ -1 + region +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m11 <- try(sdmTMB(
@@ -333,7 +374,7 @@ for (h in 1:length(species)) {
       #extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
     ))
     print( Sys.time() - start )
-    saveRDS(m11, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model11.rds"))
+    saveRDS(m11, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model11.rds"))
     # Model 12: breakpoint(o2)
     print("fitting m12")
     start = Sys.time()
@@ -341,11 +382,12 @@ for (h in 1:length(species)) {
       formula =   "catch ~ 1 +breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
-      formula =  "catch ~ -1 + region +breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
+        formula =  "catch ~ -1 + region +year +breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
+        formula =  "catch ~ -1 + region +breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m12 <- try(sdmTMB(
@@ -364,18 +406,19 @@ for (h in 1:length(species)) {
      # extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
     ))
     print( Sys.time() - start )
-    saveRDS(m12, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model12.rds"))
+    saveRDS(m12, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model12.rds"))
   # Model 13: breakpoint MI low+quad temp
   print("fitting m13")
   if(dat_names[i]!="coastwide"){
     formula =   "catch ~ 1 +breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     st_type="iid"
   } else {
-    formula = "catch ~ -1 + region +breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     if(!spatio_temp){
       st_type <- "off"
+      formula = "catch ~ -1 + region +year+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     } else{
       st_type="iid"
+      formula = "catch ~ -1 + region +breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     }
   }
   start = Sys.time()
@@ -395,7 +438,7 @@ for (h in 1:length(species)) {
     #extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
   ))
   print( Sys.time() - start )
-  saveRDS(m13, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model13.rds"))
+  saveRDS(m13, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model13.rds"))
   
   # Model 14: Breakpoint(mi median)
   print("fitting m14")
@@ -404,11 +447,12 @@ for (h in 1:length(species)) {
     formula =   "catch ~ 1 +breakpt(mi2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     st_type="iid"
   } else {
-    formula =  "catch ~ -1 + region +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     if(!spatio_temp){
       st_type <- "off"
+      formula =  "catch ~ -1 + region+year +breakpt(mi2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     } else{
       st_type="iid"
+      formula =  "catch ~ -1 + region +breakpt(mi2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     }
   }
   m14 <-try(sdmTMB(
@@ -427,7 +471,7 @@ for (h in 1:length(species)) {
     # extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
   ))
   print( Sys.time() - start )
-  saveRDS(m14, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model14.rds"))
+  saveRDS(m14, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model14.rds"))
   
   # Model 15: breakpoint(mi high)
   print("fitting m15")
@@ -436,11 +480,12 @@ for (h in 1:length(species)) {
     formula =   "catch ~ 1 +breakpt(mi3_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     st_type="iid"
   } else {
-    formula =  "catch ~ -1 + region +breakpt(mi3_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     if(!spatio_temp){
       st_type <- "off"
+      formula =  "catch ~ -1 + region+year +breakpt(mi3_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     } else{
       st_type="iid"
+      formula =  "catch ~ -1 + region +breakpt(mi3_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     }
   }
   m15 <- try(sdmTMB(
@@ -459,7 +504,7 @@ for (h in 1:length(species)) {
     #extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
   ))
   print( Sys.time() - start )
-  saveRDS(m15, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model15.rds"))
+  saveRDS(m15, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model15.rds"))
   # Model 16: breakpoint(o2)
   print("fitting m16")
   start = Sys.time()
@@ -467,11 +512,12 @@ for (h in 1:length(species)) {
     formula =   "catch ~ 1 +breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     st_type="iid"
   } else {
-    formula =  "catch ~ -1 + region +breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     if(!spatio_temp){
       st_type <- "off"
+      formula =  "catch ~ -1 + region+year +breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     } else{
       st_type="iid"
+      formula =  "catch ~ -1 + region +breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
     }
   }
   m16 <- try(sdmTMB(
@@ -490,7 +536,7 @@ for (h in 1:length(species)) {
     # extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
   ))
   print( Sys.time() - start )
-  saveRDS(m16, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_model16.rds"))
+  saveRDS(m16, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model16.rds"))
   gc()
 }
 }
