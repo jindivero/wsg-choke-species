@@ -29,7 +29,7 @@ theme_update(panel.grid.major = element_blank(),
 source("code/helper_funs.R")
 
 #IPHC or bottom trawl?
-iphc <- T
+iphc <- F
 
 ####Plot data fit in models
 ##Data names
@@ -47,14 +47,22 @@ if(iphc){
 #Output folder
 output_folder <- "region_comp"
 
+#Models to use
+mi_models2use <- c("model3","model4", "model5", "model9", "model10", "model11", "model13", "model14", "model15")
+
 ##Pull data for each species and plot
+map_data <- rnaturalearth::ne_countries(scale = "large",
+                                        returnclass = "sf",
+                                        continent = "North America")
+
+us_coast_proj <- sf::st_transform(map_data, crs = 32610)
 for(i in 1:length(species)) {
   this_species = species[i]
   print(this_species)
   for(h in 1:length(dat_names)){
     this_dat <- dat_names[h]
     print(this_dat)
-     dat <- try(readRDS(file = paste0("output/",output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
+    dat2plot <- try(readRDS(file = paste0("output/",output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
     if(is.data.frame(dat2plot)){
     ggplot(us_coast_proj) + geom_sf() +
       geom_point(filter(dat2plot,catch_weight>0),mapping=aes(x=X*1000, y=Y*1000,colour=survey), size=0.1)+
@@ -89,9 +97,10 @@ for(i in 1:length(species)) {
 #Load AIC table for model output
 #Data type comparison
 if(iphc){
-aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx"))
+aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx")))
 output_folder <- "region_comp"
 }
+
 if(!iphc){
 aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx")))
 output_folder <- "region_comp"
@@ -128,9 +137,6 @@ taxa <- read_excel("data/species_table.xlsx")
 taxa$MI_Taxa <- tolower(taxa$MI_Taxa)
 taxa$common_name <- tolower(taxa$common_name)
 
-#output folder
-output_folder <- "region_comp"
-
 ##Add range from phylogenetic imputation
 dats50 <- readRDS("data/lab_ests50.rds")
 dats90 <- readRDS("data/lab_ests90.rds")
@@ -160,7 +166,7 @@ for(i in 1:length(species)) {
     print(this_dat)
     this_data <- as.data.frame(filter(this_aic, data.type==this_dat))
     #Identify if MI is best-fitting model and pull that model
-    mi_models <- this_data[c("model9", "model10", "model11")]
+    mi_models <- this_data[,c(mi_models2use)]
     #If any cells are equal to 0
     if(any(mi_models==0 & !is.na(mi_models))){
       #Extract the name of the column which equals 0 
@@ -177,8 +183,8 @@ for(i in 1:length(species)) {
       mi1_s_pred = (mi1_pred - mean(this_datframe$mi1))/sd(this_datframe$mi1)
       mi2_s_pred = (mi2_pred - mean(this_datframe$mi2))/sd(this_datframe$mi2)
       mi3_s_pred = (mi3_pred - mean(this_datframe$mi3))/sd(this_datframe$mi3)
-      mi_best <- if(best_model=="model9") mi1_pred else if(best_model=="model10") mi2_pred else mi3_pred
-      mi_best_s <- if(best_model=="model9") mi1_s_pred else if(best_model=="model10") mi2_s_pred else mi3_s_pred
+      mi_best <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mi1_pred else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mi2_pred else mi3_pred
+      mi_best_s <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mi1_s_pred else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mi2_s_pred else mi3_s_pred
       pred_year <- unique(this_datframe$year)[1]
       log_depth_scaled_mean <- mean(this_datframe$log_depth_scaled)
       log_depth_scaled_mean2 <- log_depth_scaled_mean^2
@@ -280,13 +286,13 @@ if(iphc){
 }
 
 ggsave(
-  paste("output/plots/cond_effects_region_mi_scaled_no_se.png"),
+  paste0("output/", output_folder, "/cond_effects_region_mi_scaled_no_se.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
   scale = 1,
   width = 8.5,
-  height = 8.5,
+  height = 11,
   units = c("in"),
   bg="white",
   dpi = 600,
@@ -318,7 +324,7 @@ for(i in 1:length(species)) {
     this_dat <- dat_names[h]
     this_data <- as.data.frame(filter(this_aic, data.type==this_dat))
     #Identify if MI is best-fitting model and pull that model
-    mi_models <- this_data[c("model3", "model4", "model5")]
+    mi_models <- this_data[,c(mi_models2use)]
     #If any cells are equal to 0
     if(any(mi_models==0 & !is.na(mi_models))){
       #Extract the name of the column which equals 0 
@@ -402,9 +408,10 @@ for(i in 1:length(species)) {
   dat_names <- unique(this_aic$data.type)
   for(h in 1:length(dat_names)){
     this_dat <- dat_names[h]
+    print(this_dat)
     this_data <- as.data.frame(filter(this_aic, data.type==this_dat))
     #Identify if MI is best-fitting model and pull that model
-    mi_models <- this_data[c("model9", "model10", "model11")]
+    mi_models <- this_data[,c(mi_models2use)]
     #If any cells are equal to 0
     if(any(mi_models==0 & !is.na(mi_models))){
       #Extract the name of the column which equals 0 
@@ -416,15 +423,15 @@ for(i in 1:length(species)) {
       #Pull the data file
       this_datframe <- try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
       #Calculate mean of this_datframe$mi based on best model
-      mean_mi <- if(best_model=="model9") mean(this_datframe$mi1) else if(best_model=="model10") mean(this_datframe$mi2) else mean(this_datframe$mi3)
-      sd_mi <-   if(best_model=="model9") sd(this_datframe$mi1) else if(best_model=="model10") sd(this_datframe$mi2) else sd(this_datframe$mi3)
+      mean_mi <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mean(this_datframe$mi1) else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mean(this_datframe$mi2) else mean(this_datframe$mi3)
+      sd_mi <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") sd(this_datframe$mi1) else if(best_model=="model4"|best_model=="model10"|best_model=="model14") sd(this_datframe$mi2) else sd(this_datframe$mi3)
       #Pull breakpoint and slope
       pars <- as.data.frame(tidy(fit, effects="fixed", conf.int=T))
       slope <- filter(pars, grepl("slope", term))
       thresh <- filter(pars,grepl("breakpt", term))
       thresh$est <- (thresh$estimate*sd_mi)+mean_mi
       thresh$std.error <- (thresh$std.error*sd_mi)+mean_mi 
-      if(i==1 & h==1){
+      if(!exists("bp_est")){
           bp_est <- data.frame(species=this_species, data=this_dat, model=best_model, breakpt=thresh$est, breakpt_se=thresh$std.error)
       } else {
           bp_est <- bind_rows(bp_est, data.frame(species=this_species, model=best_model, data=this_dat, breakpt=thresh$est, breakpt_se=thresh$std.error))
@@ -439,9 +446,10 @@ bp_est$data <- factor(bp_est$data, levels=c("cc", "bc", "goa", "ebs", "coastwide
 labs <- c("British Columbia", "California Current", "Gulf of Alaska", "Eastern Bering Sea", "Coastwide")
 names(labs) <- c("bc", "cc", "goa", "ebs", "coastwide")
 
-ggplot(bp_est, aes(y=species, x=breakpt, colour=data, shape=model))+
+ggplot(bp_est, aes(y=species, x=breakpt, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
-  geom_point(aes(colour=data, shape=model), size=3, position=ggstance::position_dodgev(height=0.4))+
+  geom_point(aes(colour=data), size=3, position=ggstance::position_dodgev(height=0.4))+
+  #Can add back shape
   geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -457,7 +465,7 @@ ggplot(bp_est, aes(y=species, x=breakpt, colour=data, shape=model))+
         legend.spacing.y = unit(0, "pt"),
         legend.key.height = unit(0.25, "lines"), #Minimize legend space
         panel.spacing = unit(5, "lines"))+ #Make more space between species
-  scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
+  #scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
   xlab("Metabolic Index Breakpoint Estimate")+
   ylab("Species")+
   geom_vline(xintercept=0, linetype="dashed")+
@@ -504,7 +512,7 @@ ggsave(
 
 ##Capped at sensible numbers
 if(!iphc){
-ggplot(bp_est, aes(y=species, x=breakpt, colour=data, shape=model))+
+ggplot(bp_est, aes(y=species, x=breakpt, colour=data))+ #can add back shape
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
   geom_point(aes(colour=data, shape=model), size=3, position=ggstance::position_dodgev(height=0.4))+
   geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
@@ -584,10 +592,10 @@ invtemp.2.use <- (1 / boltz)  * ( 1 / (tref + 273.15) - 1 / (tref + 273.15))
 #Model
 model.2.use <- temp$model
 #calculate pO2 at a reference temperature and body size
-temp$est_o2 <- calc_po2_crit(invtemp.2.use,taxa.2.use,temp$breakpt,body_size, temp$model)
-temp$est_o2_low <-calc_po2_crit(invtemp.2.use,taxa.2.use,(temp$breakpt-temp$breakpt_se),body_size, temp$model)
-temp$est_o2_high<-calc_po2_crit(invtemp.2.use,taxa.2.use,(temp$breakpt+temp$breakpt_se),body_size, temp$model)
-temp$est_o2_lab <- calc_po2_crit(invtemp.2.use,taxa.2.use,1,body_size, temp$model)
+temp$est_o2 <- calc_po2_crit(invtemp.2.use,taxa.2.use,temp$breakpt,body_size, temp$model, fancy=F)
+temp$est_o2_low <-calc_po2_crit(invtemp.2.use,taxa.2.use,(temp$breakpt-temp$breakpt_se),body_size, temp$model, fancy=F)
+temp$est_o2_high<-calc_po2_crit(invtemp.2.use,taxa.2.use,(temp$breakpt+temp$breakpt_se),body_size, temp$model, fancy=F)
+temp$est_o2_lab <- calc_po2_crit(invtemp.2.use,taxa.2.use,1,body_size, temp$model, fancy=T)
 if(i==1){
   bp_est2 <- temp
 } else {
@@ -604,7 +612,8 @@ names(labs) <- c("bc", "cc", "goa", "ebs", "coastwide")
 
 ggplot(bp_est2, aes(y=species, x=est_o2, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
-  geom_point(aes(colour=data, shape=model), size=2, position=ggstance::position_dodgev(height=0.4))+
+  geom_point(aes(colour=data), size=2, position=ggstance::position_dodgev(height=0.4))+
+  #Can add shape back
   geom_linerange(aes(xmin = est_o2_low, xmax = est_o2_high, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
   theme(legend.position="top")+
   theme(legend.title=element_blank())+
@@ -620,7 +629,7 @@ ggplot(bp_est2, aes(y=species, x=est_o2, colour=data))+
         legend.spacing.y = unit(0, "pt"),
         legend.key.height = unit(0.25, "lines"), #Minimize legend space
         panel.spacing = unit(5, "lines"))+ #Make more space between species
-  scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
+ # scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
   xlab(bquote(pO[2]~"(kPa)")) +
   ylab("Species")
 }
@@ -665,7 +674,7 @@ ggsave(
 if(!iphc){
 ggplot(bp_est2, aes(y=species, x=est_o2, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
-  geom_point(aes(colour=data, shape=model), size=2, position=ggstance::position_dodgev(height=0.4))+
+  geom_point(aes(colour=data), size=2, position=ggstance::position_dodgev(height=0.4))+
   geom_linerange(aes(xmin = est_o2_low, xmax = est_o2_high, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -732,7 +741,7 @@ ggsave(
 if(!iphc){
 ggplot(bp_est2, aes(y=species, x=est_o2, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
-  geom_point(aes(colour=data, shape=model), size=2, position=ggstance::position_dodgev(height=0.4))+
+  geom_point(aes(colour=data), size=2, position=ggstance::position_dodgev(height=0.4))+
   geom_point(mapping=aes(x=est_o2_lab), colour="black", shape="triangle")+
   geom_linerange(aes(xmin = est_o2_low, xmax = est_o2_high, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
   theme(panel.grid.major = element_blank(),
@@ -814,7 +823,7 @@ bp_est5 <- bind_rows(bp_est2, dats50_12, dats90_12)
 if(!iphc){
 ggplot(bp_est5, aes(y=species, x=est_o2, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
-  geom_point(aes(colour=data, shape=model), size=2, position=ggstance::position_dodgev(height=0.4))+
+  geom_point(aes(colour=data), size=2, position=ggstance::position_dodgev(height=0.4))+
   geom_point(mapping=aes(x=est_o2_lab), colour="black", shape="triangle")+
   geom_linerange(filter(bp_est5, data!="laboratory phylogenetic imputation"),mapping=aes(xmin = est_o2_low, xmax = est_o2_high, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
   geom_linerange(filter(bp_est5, data=="laboratory phylogenetic imputation"),mapping=aes(xmin = est_o2_low, xmax = est_o2_high), colour="black", alpha=0.5, linetype="dashed")+
@@ -886,7 +895,7 @@ ggsave(
 if(!iphc){
 ggplot(bp_est5, aes(y=species, x=est_o2, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
-  geom_point(aes(colour=data, shape=model), size=2, position=ggstance::position_dodgev(height=0.4))+
+  geom_point(aes(colour=data), size=2, position=ggstance::position_dodgev(height=0.4))+
   geom_point(mapping=aes(x=est_o2_lab), colour="black", shape="triangle")+
   geom_linerange(filter(bp_est5, data!="laboratory phylogenetic imputation"),mapping=aes(xmin = est_o2_low, xmax = est_o2_high, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
   geom_linerange(filter(bp_est5, data=="laboratory phylogenetic imputation"),mapping=aes(xmin = est_o2_low, xmax = est_o2_high), colour="black", alpha=0.5, linetype="dashed")+
@@ -987,9 +996,9 @@ for(i in 1:nrow(bp.2.use)){
   test$breakpt_se2 <- test$breakpt+test$breakpt_se
   
   #calculate pO2 at a reference temperature and body size
-  est_o2 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt,body_size, test$model)
-  est_o2_se1 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt_se1,body_size, test$model)
-  est_o2_se2 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt_se2,body_size, test$model)
+  est_o2 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt,body_size, test$model, fancy=F)
+  est_o2_se1 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt_se1,body_size, test$model, fancy=F)
+  est_o2_se2 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt_se2,body_size, test$model, fancy=F)
   if(i==1){
     bp_est3 <- data.frame(species=test$species, data=test$data, model=test$model, breakpt=test$breakpt, breakpt_se=test$breakpt_se, invtemp=t.range2, temp=t.range, po2_crit=est_o2, po2_crit_se1=est_o2_se1, po2_crit_se2=est_o2_se2)
   } else {
@@ -1404,8 +1413,8 @@ for(i in 1:nrow(bp_est4)){
   #Pull the data file
   this_datframe <-try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
   #Calculate mean of this_datframe$mi based on best model
-  mean_mi <- if(best_model=="model9") mean(this_datframe$mi1) else if(best_model=="model10") mean(this_datframe$mi2) else mean(this_datframe$mi3)
-  sd_mi <-   if(best_model=="model9") sd(this_datframe$mi1) else if(best_model=="model10") sd(this_datframe$mi2) else sd(this_datframe$mi3)
+  mean_mi <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mean(this_datframe$mi1) else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mean(this_datframe$mi2) else mean(this_datframe$mi3)
+  sd_mi <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") sd(this_datframe$mi1) else if(best_model=="model4"|best_model=="model10"|best_model=="model14") sd(this_datframe$mi2) else sd(this_datframe$mi3)
   #Pull breakpoint and slope
   #find taxa from species
   taxa.2.use <- taxa$MI_Taxa[taxa$common_name==this_species]
@@ -1425,9 +1434,9 @@ for(i in 1:nrow(bp_est4)){
   #calculate pO2 at a reference temperature and body size
   #calc_po2_crit function across test in an apply function
   invtemp <- test$invtemp
-  test$est_o2 <- unlist(lapply(invtemp, calc_po2_crit, taxa.2.use,thresh_est,body_size, model))
-  test$est_o2_se1 <- unlist(lapply(invtemp, calc_po2_crit, taxa.2.use,thresh_se1,body_size, model))
-  test$est_o2_se2 <- unlist(lapply(invtemp, calc_po2_crit, taxa.2.use,thresh_se2,body_size, model))
+  test$est_o2 <- unlist(lapply(invtemp, calc_po2_crit, taxa.2.use,thresh_est,body_size, model, fancy=T))
+  test$est_o2_se1 <- unlist(lapply(invtemp, calc_po2_crit, taxa.2.use,thresh_se1,body_size, model, fancy=T))
+  test$est_o2_se2 <- unlist(lapply(invtemp, calc_po2_crit, taxa.2.use,thresh_se2,body_size, model, fancy=T))
   # test$percentile <- (test$po2-test$est_o2)/test$est_o2_se
   test$unsuitable <- ifelse(test$po2<test$est_o2, "unsuitable", "suitable")
   test$unsuitable_low <- ifelse(test$po2<test$est_o2_se1, "unsuitable", "suitable")

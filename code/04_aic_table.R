@@ -11,7 +11,7 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 source("code/helper_funs.R")
 
 #Output folder
-output_folder <- "region_comp"
+output_folder <- "region_comp_nodepth"
 
 #Models
 models <- c("model7", "model8", "model9", "model10", "model11","model12", "model13", "model14","model15", "model16")
@@ -28,11 +28,11 @@ for(i in 1:length(species)) {
     temp <- matrix(NA, 1, length(models)+5)
     this_dat <- dat_names[h]
     print(this_dat)
-    dat <- try(readRDS(file = paste0("output/region_comp/", this_species, "_", this_dat, "_dat.rds")))
+    dat <- try(readRDS(file = paste0("output/",output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
     if(class(dat)!="try-error"){
       for(j in 1:length(models)) {
         this_model <- models[j]
-        fit <- try(readRDS(file = paste0("output/region_comp/", this_species,"_",this_dat, "_", this_model,".rds")))
+        fit <- try(readRDS(file = paste0("output/", output_folder, "/", this_species,"_",this_dat, "_", this_model,".rds")))
         if(class(fit)!="try-error"){
           s <- try(sanity(fit, silent=TRUE))
           if(class(s)!="try-error"){
@@ -61,9 +61,14 @@ for(i in 1:length(species)) {
 
 aic_table <- aic_table[2:nrow(aic_table),]
 colnames(aic_table) <- c("model7", "model8", "model9", "model10", "model11","model12", "model13", "model14","model15", "model16","species", "data type", "N obs", "N years", "N regions")
+#How many in each model type?
+counts <- aic_table %>%
+  summarise(across(everything(), ~ sum(. == 0, na.rm=T)))
+
+
 #Round
 aic_table <- aic_table %>%
-  mutate(across(1:length(models), is.numeric))
+  mutate(across(1:length(models), as.numeric))
 aic_table <- aic_table %>%
   mutate(across(1:length(models), round, 5))
 
@@ -72,6 +77,30 @@ aic_table <- aic_table %>%
 aic_table[is.na(aic_table)] <- "--"
 aic <- aic_table %>%
   gt() %>%
+  tab_style(
+    style = cell_fill(color = "gray"),
+    locations = cells_body(columns = model1, rows = model1==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "lightcoral"),
+    locations = cells_body(columns = model2, rows = model2==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "thistle2"),
+    locations = cells_body(columns = model3, rows = model3==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "thistle"),
+    locations = cells_body(columns = model4, rows = model4==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "thistle3"),
+    locations = cells_body(columns = model5, rows = model5==0)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "lightblue"),
+    locations = cells_body(columns = model6, rows = model6==0)
+  ) %>%
   tab_style(
     style = cell_fill(color = "gray"),
     locations = cells_body(columns = model7, rows = model7==0)
@@ -114,5 +143,5 @@ aic <- aic_table %>%
   )
 
 #save
-write_xlsx(aic_table, filename="output/", output_folder, "/aic_table.xlsx")
-gtsave(aic, filename="output/", output_folder, "/aic_table.html")
+write_xlsx(aic_table, file=paste0("output/", output_folder, "/aic_table.xlsx"))
+gtsave(aic, file=paste0("output/", output_folder, "/aic_table.html"))

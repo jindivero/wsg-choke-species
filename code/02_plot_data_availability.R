@@ -7,6 +7,7 @@ library(visreg)
 library(ggpubr)
 library(purrr)
 library(readxl)
+library(openxlsx2)
 setwd("~/Dropbox/GitHub/wsg-choke-species")
 
 #Load functions
@@ -249,8 +250,68 @@ species <- left_join(species, table2)
 #save
 write.csv(species, file="output/species_summary.csv")
 
-#Range
-temp_ranges <- dplyr::group_by(dat, species, region) %>%
-  dplyr::filter(cpue_kg_km2 > 0) %>%
-  dplyr::summarize(min_temp = min(temp,na.rm=T), max_temp = max(temp,na.rm=T))
-saveRDS(temp_ranges, "outputs/MI_ranges.rds")
+##Get depth habitat for filtering
+species <- read_excel("data/species_table.xlsx")
+species$common_name <- tolower(species$common_name)
+species <- unique(species$common_name)
+for(i in 1:length(species)){
+  this_species <- species[i]
+  dat_depth2 <- filter(dat, common_name==this_species)
+  dat_depth2 <- dat_depth2  %>% drop_na(depth, catch_weight)
+  
+  # Sort by depth
+  dat_depth2 <- dat_depth2[order(dat_depth2$depth), ]
+  
+  #Calculate the cumulative sum of catch by depth
+  dat_depth2$cumsum_catch <- cumsum(dat_depth2$catch_weight)
+  
+  #Calculate the proportional cumulative sum
+  dat_depth2$prop_cumsum_catch <- dat_depth2$cumsum_catch / sum(dat_depth2$catch_weight, na.rm=T)
+  
+  # Find the index of the closest value to 98% (0.97) in prop_cumsum_var1
+  closest_index <- which.min(abs(dat_depth2$prop_cumsum_catch - 0.99))
+  
+  # Get the depth at 97% catch
+  closest_value <- dat_depth2$depth[closest_index]
+  
+  #Add to dataframe
+  dat_depth2$filtered_depth <- closest_value
+  
+  #Dataframe
+  depth2use <- data.frame(common_name=this_species, depth=closest_value)
+  
+  if(i==1){
+    depths <- depth2use
+    dat_depths <- dat_depth2
+  } else {
+    depths <- bind_rows(depths, depth2use)
+    dat_depths <- bind_rows(dat_depths, dat_depth2)
+  }
+}
+
+#Species table
+species <- read_excel("data/species_table.xlsx")
+species$common_name <- tolower(species$common_name)
+species <- left_join(species, depths)
+write_xlsx(species, "data/species_table.xlsx")
+
+#Plot cumulative sum by depth
+ggplot(dat_depths, aes(x=depth, y=prop_cumsum_catch))+
+  geom_line()+
+  geom_vline(species, mapping=aes(xintercept=depth), linetype="dashed")+
+  facet_wrap("common_name", ncol=4)+
+  ylab("Cumulative Sum of Catch")+
+  xlab("Depth (m)")
+
+ggsave(
+  paste("output/plots/dat_availability/cumulative_depth.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 8.5,
+  height = 11,
+  units = c("in"),
+  dpi = 600,
+  limitsize = TRUE, bg="white"
+)
