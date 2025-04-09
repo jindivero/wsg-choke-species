@@ -76,7 +76,7 @@ for(i in 1:length(species)) {
       theme(axis.text.x=element_blank())
     
     
-    ggsave(
+  x  ggsave(
       paste("output/plots/data_fit_mapping/map_",this_species,"_", this_dat,".png"),
       plot = last_plot(),
       device = NULL,
