@@ -30,6 +30,7 @@ source("code/helper_funs.R")
 
 #IPHC or bottom trawl?
 iphc <- F
+both <- T
 
 ####Plot data fit in models
 ##Data names
@@ -44,11 +45,18 @@ if(iphc){
   dat_names <- c("cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
   species <- c("sablefish", "pacific cod", "pacific halibut", "yelloweye rockfish", "longnose skate", "big skate", "spiny dogfish", "rougheye rockfish")
 }
+if(both){
+  dat_names <- c("cc", "bc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
+  species <- read_excel("data/species_table.xlsx")
+  species$common_name <- tolower(species$common_name)
+  species$scientific_name <- tolower(species$scientific_name)
+  species <- unique(species$common_name)
+}
 #Output folder
 output_folder <- "region_comp"
 
 #Models to use
-mi_models2use <- c("model3","model4", "model5", "model9", "model10", "model11", "model13", "model14", "model15")
+mi_models2use <- c("model13", "model14", "model15")
 
 ##Pull data for each species and plot
 map_data <- rnaturalearth::ne_countries(scale = "large",
@@ -76,7 +84,7 @@ for(i in 1:length(species)) {
       theme(axis.text.x=element_blank())
     
     
-  x  ggsave(
+    ggsave(
       paste("output/plots/data_fit_mapping/map_",this_species,"_", this_dat,".png"),
       plot = last_plot(),
       device = NULL,
@@ -95,16 +103,11 @@ for(i in 1:length(species)) {
 ##Create sequence of metabolic index values for marginal effects, so same for all
 
 #Load AIC table for model output
-#Data type comparison
-if(iphc){
 aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx")))
-output_folder <- "region_comp"
-}
-
-if(!iphc){
-aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx")))
-output_folder <- "region_comp"
-}
+#Make first 6 columns in AIC numeric
+aic[,1:6] <- sapply(aic[,1:6], as.numeric)
+#Filter aic to only if a 0 in any of columns named in mi_models2use
+aic <- filter(aic, aic[,mi_models2use[1]]==0 | aic[,mi_models2use[2]]==0 | aic[,mi_models2use[3]]==0)
 
 #Species to run
 species <- unique(aic$species)
@@ -183,8 +186,8 @@ for(i in 1:length(species)) {
       mi1_s_pred = (mi1_pred - mean(this_datframe$mi1))/sd(this_datframe$mi1)
       mi2_s_pred = (mi2_pred - mean(this_datframe$mi2))/sd(this_datframe$mi2)
       mi3_s_pred = (mi3_pred - mean(this_datframe$mi3))/sd(this_datframe$mi3)
-      mi_best <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mi1_pred else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mi2_pred else mi3_pred
-      mi_best_s <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mi1_s_pred else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mi2_s_pred else mi3_s_pred
+      mi_best <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mi1_pred else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mi2_pred else if(best_model=="model5"|best_model=="model11"|best_model=="model15") mi3_pred
+      mi_best_s <- if(best_model=="model3"|best_model=="model9"|best_model=="model13") mi1_s_pred else if(best_model=="model4"|best_model=="model10"|best_model=="model14") mi2_s_pred else if(best_model=="model5"|best_model=="model11"|best_model=="model15") mi3_pred
       pred_year <- unique(this_datframe$year)[1]
       log_depth_scaled_mean <- mean(this_datframe$log_depth_scaled)
       log_depth_scaled_mean2 <- log_depth_scaled_mean^2
@@ -203,7 +206,7 @@ for(i in 1:length(species)) {
                 log_depth_scaled2 = log_depth_scaled_mean2,
                 log_depth_scaled3 = log_depth_scaled_mean3,
                 year = pred_year,
-                survey="nwfsc",
+                survey="iphc",
                 region=this_region)
           #nd_po2 <- convert_class(nd_po2)
           p1 <- try(predict(fit, newdata = nd_po2, se_fit = TRUE, re_form = NA))
@@ -215,6 +218,8 @@ for(i in 1:length(species)) {
           mutate(est_sc= exp(est)/max(exp(est), na.rm=T),
                  est_se_sc1 = (exp(est)-exp(est_se))/max(exp(est), na.rm=T),
                  est_se_sc2 = (exp(est)+exp(est_se))/max(exp(est), na.rm=T))
+         # p1$est_se_sc1 <- ifelse((p1$est_se_sc1=="NaN"|p1$est_se_sc1=="Inf"), NA, p1$est_se_sc1)
+        #  p1$est_se_sc2 <- ifelse((p1$est_se_sc2=="NaN"|p1$est_se_sc2=="Inf"), NA, p1$est_se_sc2)
           cond_effects_preds <- bind_rows(cond_effects_preds, p1)
           }
     }
@@ -227,6 +232,7 @@ cond_effects_preds <- cond_effects_preds[-1,]
 #Remove first 18 columns
 cond_effects_preds <- cond_effects_preds[,19:ncol(cond_effects_preds)]
 
+
 if(!iphc){
 cond_effects_preds$data <- factor(cond_effects_preds$data, levels=c("cc", "bc", "goa", "ebs", "coastwide"))
 labs <- c("British Columbia", "California Current", "Gulf of Alaska", "Eastern Bering Sea", "Coastwide")
@@ -236,7 +242,7 @@ names(labs) <- c("bc", "cc", "goa", "ebs", "coastwide")
 ggplot(cond_effects_preds, aes(mi_best, y=est_sc))+
   facet_wrap("species", ncol=4)+
   geom_line(aes(colour=data))+
-  #geom_ribbon(aes(ymin = est_se_sc1, ymax = est_se_sc2, fill=data), alpha=0.4)+
+ # geom_ribbon(aes(ymin = est_se_sc1, ymax = est_se_sc2, fill=data), alpha=0.4)+
   scale_x_continuous(limits=c(0,15, by=5))+
   labs(x = bquote('Metabolic Index'), y = bquote('Conditional Effect Population Density'~(kg~km^-2)))+
   theme(panel.grid.major = element_blank(),
@@ -251,7 +257,7 @@ ggplot(cond_effects_preds, aes(mi_best, y=est_sc))+
   theme(panel.spacing = unit(1, "lines"))
 
 ggsave(
-  paste("output/plots/cond_effects_region_mi_scaled_no_se.png"),
+  paste0("output/", output_folder, "/cond_effects_region_mi_scaled_no_se.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -284,6 +290,45 @@ if(iphc){
     theme(legend.key.height = unit(2, "lines"))+
     theme(panel.spacing = unit(1, "lines"))
 }
+if(both){
+  cond_effects_preds$data <- factor(cond_effects_preds$data, levels=c("cc", "bc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc"))
+  labs <- c("British Columbia", "California Current", "Gulf of Alaska", "Eastern Bering Sea", "Coastwide", "British Columbia IPHC", "California Current IPHC", "Gulf of Alaska IPHC", "Eastern Bering Sea IPHC", "Coastwide IPHC")
+  names(labs) <- c("bc", "cc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
+  
+  ##Plot conditional effects
+  ggplot(cond_effects_preds, aes(mi_best, y=est_sc))+
+    facet_wrap("species", ncol=4)+
+    geom_line(aes(colour=data))+
+    # geom_ribbon(aes(ymin = est_se_sc1, ymax = est_se_sc2, fill=data), alpha=0.4)+
+    scale_x_continuous(limits=c(0,15, by=5))+
+    labs(x = bquote('Metabolic Index'), y = bquote('Conditional Effect Population Density'~(kg~km^-2)))+
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          strip.background = element_blank(),
+          strip.text=element_text(size=12))+
+    theme(legend.position="top")+
+    theme(legend.title=element_blank())+
+    theme(text=element_text(size=15))+
+    scale_colour_manual(labels=labs, values=c("#F8766D","#7CAE00", "#00BFC4",  "#C77CFF", "#00B0F6","#F8766D","#7CAE00", "#00BFC4",  "#C77CFF", "#00B0F6" ))+
+    theme(legend.key.height = unit(2, "lines"))+
+    theme(panel.spacing = unit(1, "lines"))
+  
+  ggsave(
+    paste0("output/", output_folder, "/cond_effects_region_mi_scaled_no_se.png"),
+    plot = last_plot(),
+    device = NULL,
+    path = NULL,
+    scale = 1,
+    width = 8.5,
+    height = 11,
+    units = c("in"),
+    bg="white",
+    dpi = 600,
+    limitsize = TRUE
+  )
+  
+}
+
 
 ggsave(
   paste0("output/", output_folder, "/cond_effects_region_mi_scaled_no_se.png"),
@@ -430,11 +475,12 @@ for(i in 1:length(species)) {
       slope <- filter(pars, grepl("slope", term))
       thresh <- filter(pars,grepl("breakpt", term))
       thresh$est <- (thresh$estimate*sd_mi)+mean_mi
-      thresh$std.error <- (thresh$std.error*sd_mi)+mean_mi 
+      thresh$low <- ((thresh$estimate-thresh$std.error)*sd_mi)+mean_mi 
+      thresh$high <- ((thresh$estimate+thresh$std.error)*sd_mi)+mean_mi
       if(!exists("bp_est")){
-          bp_est <- data.frame(species=this_species, data=this_dat, model=best_model, breakpt=thresh$est, breakpt_se=thresh$std.error)
+          bp_est <- data.frame(species=this_species, data=this_dat, model=best_model, breakpt=thresh$est, breakpt_se1=thresh$low, breakpt_se2=thresh$high)
       } else {
-          bp_est <- bind_rows(bp_est, data.frame(species=this_species, model=best_model, data=this_dat, breakpt=thresh$est, breakpt_se=thresh$std.error))
+          bp_est <- bind_rows(bp_est, data.frame(species=this_species, model=best_model, data=this_dat, breakpt=thresh$est, breakpt_se1=thresh$low, breakpt_se2=thresh$high))
       }
     }
   }
@@ -450,7 +496,7 @@ ggplot(bp_est, aes(y=species, x=breakpt, colour=data))+
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
   geom_point(aes(colour=data), size=3, position=ggstance::position_dodgev(height=0.4))+
   #Can add back shape
-  geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
+  geom_linerange(aes(xmin = breakpt_se1, xmax = breakpt_se2, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         strip.background = element_blank(),
@@ -471,11 +517,18 @@ ggplot(bp_est, aes(y=species, x=breakpt, colour=data))+
   geom_vline(xintercept=0, linetype="dashed")+
   geom_vline(xintercept=1, linetype="dashed")
 }
-if(iphc){
-  ggplot(bp_est, aes(y=species, x=breakpt, colour=data, shape=model))+
+if(both){
+  bp_est$data <- factor(bp_est$data, levels=c("cc", "bc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc"))
+  labs <- c("British Columbia", "California Current", "Gulf of Alaska", "Eastern Bering Sea", "Coastwide", "British Columbia IPHC", "California Current IPHC", "Gulf of Alaska IPHC", "Eastern Bering Sea IPHC", "Coastwide IPHC")
+  names(labs) <- c("bc", "cc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
+  #Add column for IPHC versus not
+  bp_est$type <- ifelse(grepl("iphc", bp_est$data), "iphc included", "no iphc")
+  
+  ggplot(bp_est, aes(y=species, x=breakpt, colour=data))+
     #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
-    geom_point(aes(colour=data, shape=model), size=3, position=ggstance::position_dodgev(height=0.4))+
-    geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
+    geom_point(aes(colour=data, shape=type), size=3, position=ggstance::position_dodgev(height=0.4))+
+    #Can add back shape
+    geom_linerange(aes(xmin = breakpt_se1, xmax = breakpt_se2, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
     theme(panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
           strip.background = element_blank(),
@@ -484,12 +537,13 @@ if(iphc){
     theme(legend.title=element_blank())+
     theme(text=element_text(size=15))+
     #xlim(-1,10)+
-    #guides( color = guide_legend(nrow = 1), shape = guide_legend(nrow = 1))+
+    scale_colour_manual(values=c("#F8766D","#7CAE00", "#00BFC4",  "#C77CFF", "#00B0F6", "#F8766D","#7CAE00", "#00BFC4",  "#C77CFF", "#00B0F6"))+
+    guides( color = guide_legend(nrow = 1), shape = guide_legend(nrow = 1))+
     theme(legend.box = "vertical",
           legend.spacing.y = unit(0, "pt"),
           legend.key.height = unit(0.25, "lines"), #Minimize legend space
-          panel.spacing = unit(2, "lines"))+ #Make more space between species
-    scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
+          panel.spacing = unit(5, "lines"))+ #Make more space between species
+    #scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
     xlab("Metabolic Index Breakpoint Estimate")+
     ylab("Species")+
     geom_vline(xintercept=0, linetype="dashed")+
@@ -497,7 +551,7 @@ if(iphc){
 }
 
 ggsave(
-  paste("output/plots/breakpt_est_all.png"),
+  paste0("output/", output_folder, "/breakpt_est_all.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -515,8 +569,8 @@ if(!iphc){
 ggplot(bp_est, aes(y=species, x=breakpt, colour=data))+ #can add back shape
   #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
   geom_point(aes(colour=data, shape=model), size=3, position=ggstance::position_dodgev(height=0.4))+
-  geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
-  theme(panel.grid.major = element_blank(),
+    geom_linerange(aes(xmin = breakpt_se1, xmax = breakpt_se2, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
+    theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         strip.background = element_blank(),
         strip.text=element_text(size=12))+
@@ -532,7 +586,7 @@ ggplot(bp_est, aes(y=species, x=breakpt, colour=data))+ #can add back shape
   scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
   xlab("Metabolic Index Breakpoint Estimate")+
   ylab("Species")+
-  coord_cartesian(xlim=c(0, 5))+
+  coord_cartesian(xlim=c(-20, 30))+
   geom_vline(xintercept=0, linetype="dashed")+
   geom_vline(xintercept=1, linetype="dashed")
 }
@@ -540,7 +594,7 @@ if(iphc){
   ggplot(bp_est, aes(y=species, x=breakpt, colour=data, shape=model))+
     #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
     geom_point(aes(colour=data, shape=model), size=3, position=ggstance::position_dodgev(height=0.4))+
-    geom_linerange(aes(xmin = breakpt-breakpt_se, xmax = breakpt+breakpt_se, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
+    geom_linerange(aes(xmin = breakpt_se1, xmax = breakpt_se2, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
     theme(panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
           strip.background = element_blank(),
@@ -561,7 +615,7 @@ if(iphc){
     geom_vline(xintercept=1, linetype="dashed")
 }
 ggsave(
-  paste("output/plots/breakpt_est_truncated.png"),
+  paste0("output/", output_folder, "breakpt_est_truncated.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -578,7 +632,7 @@ ggsave(
 #Reference temp (12 deg C)
 ref_temp <- 15
 #Body size at 1kg
-body_size <- 1
+body_size <- 2
 
 for(i in 1:nrow(bp_est)){
 temp <- bp_est[i,]
@@ -593,8 +647,8 @@ invtemp.2.use <- (1 / boltz)  * ( 1 / (tref + 273.15) - 1 / (tref + 273.15))
 model.2.use <- temp$model
 #calculate pO2 at a reference temperature and body size
 temp$est_o2 <- calc_po2_crit(invtemp.2.use,taxa.2.use,temp$breakpt,body_size, temp$model, fancy=F)
-temp$est_o2_low <-calc_po2_crit(invtemp.2.use,taxa.2.use,(temp$breakpt-temp$breakpt_se),body_size, temp$model, fancy=F)
-temp$est_o2_high<-calc_po2_crit(invtemp.2.use,taxa.2.use,(temp$breakpt+temp$breakpt_se),body_size, temp$model, fancy=F)
+temp$est_o2_low <-calc_po2_crit(invtemp.2.use,taxa.2.use,temp$breakpt_se1,body_size, temp$model, fancy=F)
+temp$est_o2_high<-calc_po2_crit(invtemp.2.use,taxa.2.use,temp$breakpt_se2,body_size, temp$model, fancy=F)
 temp$est_o2_lab <- calc_po2_crit(invtemp.2.use,taxa.2.use,1,body_size, temp$model, fancy=T)
 if(i==1){
   bp_est2 <- temp
@@ -655,9 +709,39 @@ if(iphc){
     xlab(bquote(pO[2]~"(kPa)")) +
     ylab("Species")
 }
+if(both){
+  bp_est2$data <- factor(bp_est2$data, levels=c("cc", "bc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc"))
+  labs <- c("British Columbia", "California Current", "Gulf of Alaska", "Eastern Bering Sea", "Coastwide", "British Columbia IPHC", "California Current IPHC", "Gulf of Alaska IPHC", "Eastern Bering Sea IPHC", "Coastwide IPHC")
+  names(labs) <- c("bc", "cc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
+  #Add column for IPHC versus not
+  bp_est2$type <- ifelse(grepl("iphc", bp_est2$data), "iphc included", "no iphc")
+  
+  ggplot(bp_est2, aes(y=species, x=est_o2, colour=data))+
+    #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
+    geom_point(aes(colour=data, shape=type), size=2, position=ggstance::position_dodgev(height=0.4))+
+    #Can add shape back
+    geom_linerange(aes(xmin = est_o2_low, xmax = est_o2_high, colour=data),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
+    theme(legend.position="top")+
+    theme(legend.title=element_blank())+
+    theme(text=element_text(size=15))+
+    # xlim(0,50)+
+    scale_colour_manual(values=c("#F8766D","#7CAE00", "#00BFC4",  "#C77CFF", "#00B0F6", "#F8766D","#7CAE00", "#00BFC4",  "#C77CFF", "#00B0F6"))+
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          strip.background = element_blank(),
+          strip.text=element_text(size=12))+
+    guides( color = guide_legend(nrow = 1), shape = guide_legend(nrow = 1))+
+    theme(legend.box = "vertical",
+          legend.spacing.y = unit(0, "pt"),
+          legend.key.height = unit(0.25, "lines"), #Minimize legend space
+          panel.spacing = unit(5, "lines"))+ #Make more space between species
+    # scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
+    xlab(bquote(pO[2]~"(kPa)")) +
+    ylab("Species")
+}
 
 ggsave(
-  paste("output/plots/breakpt_est_o2_all.png"),
+  paste0("output/", output_folder, "/breakpt_est_o2_all.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -721,7 +805,7 @@ if(iphc){
 }
 
 ggsave(
-  paste("output/plots/breakpt_est_o2_truncated.png"),
+  paste0("output/", output_folder, "/breakpt_est_o2_truncated.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -793,7 +877,7 @@ if(iphc){
     scale_x_continuous(expand=c(0,0))
 }
 ggsave(
-  paste("output/plots/breakpt_est_o2_lab_ests.png"),
+  paste0("output/", output_folder, "/breakpt_est_o2_lab_ests.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -845,7 +929,7 @@ ggplot(bp_est5, aes(y=species, x=est_o2, colour=data))+
   xlab(bquote(pO[2]~"(kPa)")) +
   ylab("Species")+
   scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
-  coord_cartesian(xlim=c(0, 75))+
+  #coord_cartesian(xlim=c(0, 75))+
   scale_x_continuous(expand=c(0,0))
 }
 if(iphc){
@@ -878,7 +962,7 @@ if(iphc){
 }
 
 ggsave(
-  paste("output/plots/breakpt_est_o2_lab_ests_ribbon.png"),
+  paste0("output/", output_folder, "/breakpt_est_o2_lab_ests_ribbon.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -967,7 +1051,8 @@ ggsave(
 #Round
 bp_est_save <- bp_est2
 bp_est_save$breakpt<- round(as.numeric(bp_est_save$breakpt), digits=3)
-bp_est_save$breakpt_se<- round(as.numeric(bp_est_save$breakpt_se), digits=3)
+bp_est_save$breakpt_se1<- round(as.numeric(bp_est_save$breakpt_se1), digits=3)
+bp_est_save$breakpt_se2<- round(as.numeric(bp_est_save$breakpt_se1), digits=3)
 bp_est_save$est_o2<- round(as.numeric(bp_est_save$est_o2), digits=3)
 bp_est_save$est_o2_low<- round(as.numeric(bp_est_save$est_o2_low), digits=3)
 bp_est_save$est_o2_high<- round(as.numeric(bp_est_save$est_o2_high), digits=3)
@@ -992,17 +1077,15 @@ for(i in 1:nrow(bp.2.use)){
   body_size <- 2
   #Model
   model.2.use <- test$model
-  test$breakpt_se1 <- test$breakpt-test$breakpt_se
-  test$breakpt_se2 <- test$breakpt+test$breakpt_se
   
   #calculate pO2 at a reference temperature and body size
   est_o2 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt,body_size, test$model, fancy=F)
   est_o2_se1 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt_se1,body_size, test$model, fancy=F)
   est_o2_se2 <- calc_po2_crit(t.range2,taxa.2.use,test$breakpt_se2,body_size, test$model, fancy=F)
   if(i==1){
-    bp_est3 <- data.frame(species=test$species, data=test$data, model=test$model, breakpt=test$breakpt, breakpt_se=test$breakpt_se, invtemp=t.range2, temp=t.range, po2_crit=est_o2, po2_crit_se1=est_o2_se1, po2_crit_se2=est_o2_se2)
+    bp_est3 <- data.frame(species=test$species, data=test$data, model=test$model, breakpt=test$breakpt, breakpt_se1=test$breakpt_se1,breakpt_se2=test$breakpt_se2, invtemp=t.range2, temp=t.range, po2_crit=est_o2, po2_crit_se1=est_o2_se1, po2_crit_se2=est_o2_se2)
   } else {
-    dat3 <- data.frame(species=test$species, data=test$data, model=test$model, breakpt=test$breakpt, breakpt_se=test$breakpt_se, invtemp=t.range2, temp=t.range, po2_crit=est_o2,  po2_crit_se1=est_o2_se1, po2_crit_se2=est_o2_se2)
+    dat3 <- data.frame(species=test$species, data=test$data, model=test$model, breakpt=test$breakpt,  breakpt_se1=test$breakpt_se1,breakpt_se2=test$breakpt_se2, invtemp=t.range2, temp=t.range, po2_crit=est_o2,  po2_crit_se1=est_o2_se1, po2_crit_se2=est_o2_se2)
     bp_est3 <- bind_rows(bp_est3, dat3)
   }
 }
@@ -1065,7 +1148,7 @@ ggplot(data = dat2,aes(x = temperature_C)) +
   theme(panel.spacing = unit(0.2, "lines"))
 
 ggsave(
-  paste("output/plots/temp_o2_truncated.png"),
+  paste0("output/", output_folder, "/temp_o2_truncated.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -1102,7 +1185,7 @@ for(i in 1:nrow(bp.2.use)){
     ggtitle(paste(this_species, " ", this_region))
   
   ggsave(
-    paste("output/plots/obs_crit/obs_crit_", this_species, "_", this_dat, ".png"),
+    paste0("output/", output_folder, "/", this_species, "_", this_dat, ".png"),
     plot = last_plot(),
     device = NULL,
     path = NULL,
@@ -1193,7 +1276,7 @@ if(iphc){
   #coord_cartesian(xlim=c(0, 15), ylim=c(0, 40))
 }
 ggsave(
-  paste("output/plots/po2_crit_all_with_se.png"),
+  paste0("output/", output_folder, "/po2_crit_all_with_se.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -1301,7 +1384,7 @@ if(iphc){
 }
 
 ggsave(
-  paste("output/plots/po2_crit_with_lab.png"),
+  paste0("output/", output_folder, "/po2_crit_with_lab.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -1348,7 +1431,7 @@ if(iphc){
   #coord_cartesian(xlim=c(0, 15), ylim=c(0, 40))
 }
 ggsave(
-  paste("output/plots/po2_crit_with_lab2.png"),
+  paste0("output/", output_folder, "/po2_crit_with_lab2.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -1384,7 +1467,7 @@ for(i in 1:nrow(bp_est3)){
     ggtitle(paste(this_species, " ", this_region))
   
   ggsave(
-    paste("output/plots/po2_crit_labs/po2_crit_lab", this_species, "_", this_dat, ".png"),
+    paste0("output/", output_folder, "/po2_crit_lab", this_species, "_", this_dat, ".png"),
     plot = last_plot(),
     device = NULL,
     path = NULL,
@@ -1428,7 +1511,7 @@ for(i in 1:nrow(bp_est4)){
   test$data <- paste(this_dat)
   test$species <- paste(this_species)
   thresh_est <- dat.2.est$breakpt
-  thresh_se <- dat.2.est$breakpt_se
+  thresh_se <- dat.2.est$breakpt_se                                               
   thresh_se1 <- thresh_est-thresh_se
   thresh_se2 <- thresh_est+thresh_se
   #calculate pO2 at a reference temperature and body size

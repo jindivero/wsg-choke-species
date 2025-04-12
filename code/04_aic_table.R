@@ -11,12 +11,12 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 source("code/helper_funs.R")
 
 #Output folder
-output_folder <- "region_comp_nodepth"
+output_folder <- "region_comp"
 
 #Models
-models <- c("model7", "model8", "model9", "model10", "model11","model12", "model13", "model14","model15", "model16")
+models <- c("model7", "model8", "model13", "model14","model15", "model16")
 aic_table = as.data.frame(matrix(NA, 1, length(models)+5))
-dat_names <- c("cc", "bc", "goa", "ebs", "coastwide")
+dat_names <- c("cc", "bc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
 species <- read_excel("data/species_table.xlsx")
 species$common_name <- tolower(species$common_name)
 species$scientific_name <- tolower(species$scientific_name)
@@ -60,7 +60,7 @@ for(i in 1:length(species)) {
 }
 
 aic_table <- aic_table[2:nrow(aic_table),]
-colnames(aic_table) <- c("model7", "model8", "model9", "model10", "model11","model12", "model13", "model14","model15", "model16","species", "data type", "N obs", "N years", "N regions")
+colnames(aic_table) <- c("model7", "model8",  "model13", "model14","model15", "model16","species", "data type", "N obs", "N years", "N regions")
 #How many in each model type?
 counts <- aic_table %>%
   summarise(across(everything(), ~ sum(. == 0, na.rm=T)))
@@ -70,37 +70,38 @@ counts <- aic_table %>%
 aic_table <- aic_table %>%
   mutate(across(1:length(models), as.numeric))
 aic_table <- aic_table %>%
-  mutate(across(1:length(models), round, 5))
+  mutate(across(1:length(models), round, 8))
 
 
 #Replace NA with --
-aic_table[is.na(aic_table)] <- "--"
-aic <- aic_table %>%
+aic_table2 <- aic_table
+aic_table2[is.na(aic_table2)] <- "--"
+aic <- aic_table2 %>%
   gt() %>%
-  tab_style(
-    style = cell_fill(color = "gray"),
-    locations = cells_body(columns = model1, rows = model1==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "lightcoral"),
-    locations = cells_body(columns = model2, rows = model2==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "thistle2"),
-    locations = cells_body(columns = model3, rows = model3==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "thistle"),
-    locations = cells_body(columns = model4, rows = model4==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "thistle3"),
-    locations = cells_body(columns = model5, rows = model5==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "lightblue"),
-    locations = cells_body(columns = model6, rows = model6==0)
-  ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "gray"),
+  #   locations = cells_body(columns = model1, rows = model1==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "lightcoral"),
+  #   locations = cells_body(columns = model2, rows = model2==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "thistle2"),
+  #   locations = cells_body(columns = model3, rows = model3==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "thistle"),
+  #   locations = cells_body(columns = model4, rows = model4==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "thistle3"),
+  #   locations = cells_body(columns = model5, rows = model5==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "lightblue"),
+  #   locations = cells_body(columns = model6, rows = model6==0)
+  # ) %>%
   tab_style(
     style = cell_fill(color = "gray"),
     locations = cells_body(columns = model7, rows = model7==0)
@@ -109,22 +110,22 @@ aic <- aic_table %>%
     style = cell_fill(color = "indianred"),
     locations = cells_body(columns = model8, rows = model8==0)
   ) %>%
-  tab_style(
-    style = cell_fill(color = "thistle2"),
-    locations = cells_body(columns = model9, rows = model9==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "thistle"),
-    locations = cells_body(columns = model10, rows = model10==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "thistle3"),
-    locations = cells_body(columns = model11, rows = model11==0)
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "lightblue"),
-    locations = cells_body(columns = model12, rows = model12==0)
-  ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "thistle2"),
+  #   locations = cells_body(columns = model9, rows = model9==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "thistle"),
+  #   locations = cells_body(columns = model10, rows = model10==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "thistle3"),
+  #   locations = cells_body(columns = model11, rows = model11==0)
+  # ) %>%
+  # tab_style(
+  #   style = cell_fill(color = "lightblue"),
+  #   locations = cells_body(columns = model12, rows = model12==0)
+  # ) %>%
       tab_style(
         style = cell_fill(color = "thistle2"),
         locations = cells_body(columns = model13, rows = model13==0)

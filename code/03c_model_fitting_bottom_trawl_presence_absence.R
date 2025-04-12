@@ -226,16 +226,16 @@ for (h in 1:length(species)) {
     print(paste(this_species))
     print("fitting m1")
     if(dat_names[i]!="coastwide"){
-      formula =   "catch ~ -1 + year+log_depth_scaled+ log_depth_scaled2"
+      formula =   "presence ~ -1 + year+log_depth_scaled+ log_depth_scaled2"
       st_type="iid"
     } else {
-      formula = "catch ~ -1 + year+region+log_depth_scaled+ log_depth_scaled2"
+      formula = "presence ~ -1 + year+region+log_depth_scaled+ log_depth_scaled2"
       if(!spatio_temp){
         st_type <- "off"
-        formula = "catch ~ -1 year+ region+log_depth_scaled+ log_depth_scaled2"
+        formula = "presence ~ -1 +year+ region+log_depth_scaled+ log_depth_scaled2"
       } else{
         st_type="iid"
-        formula = "catch ~ -1 + year+region +log_depth_scaled+ log_depth_scaled2"
+        formula = "presence ~ -1 + year+region +log_depth_scaled+ log_depth_scaled2"
       }
     }
     start = Sys.time()
