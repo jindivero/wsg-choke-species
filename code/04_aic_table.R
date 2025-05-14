@@ -11,10 +11,10 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 source("code/helper_funs.R")
 
 #Output folder
-output_folder <- "region_comp"
+output_folder <- "presence_absence"
 
 #Models
-models <- c("model7", "model8", "model13", "model14","model15", "model16")
+models <- c("model7", "model8", "model13", "model14","model15")
 aic_table = as.data.frame(matrix(NA, 1, length(models)+5))
 dat_names <- c("cc", "bc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
 species <- read_excel("data/species_table.xlsx")
@@ -36,7 +36,7 @@ for(i in 1:length(species)) {
         if(class(fit)!="try-error"){
           s <- try(sanity(fit, silent=TRUE))
           if(class(s)!="try-error"){
-            if(s$hessian_ok + s$eigen_values_ok +s$nlminb_ok== 3){
+            if(s$hessian_ok + s$eigen_values_ok +s$nlminb_ok>0){
               temp[1,j] <- AIC(fit)
             }
           } else{
@@ -60,7 +60,7 @@ for(i in 1:length(species)) {
 }
 
 aic_table <- aic_table[2:nrow(aic_table),]
-colnames(aic_table) <- c("model7", "model8",  "model13", "model14","model15", "model16","species", "data type", "N obs", "N years", "N regions")
+colnames(aic_table) <- c("model7", "model8",  "model13", "model14","model15", "species", "data type", "N obs", "N years", "N regions")
 #How many in each model type?
 counts <- aic_table %>%
   summarise(across(everything(), ~ sum(. == 0, na.rm=T)))
@@ -137,11 +137,7 @@ aic <- aic_table2 %>%
       tab_style(
         style = cell_fill(color = "thistle3"),
         locations = cells_body(columns = model15, rows = model15==0)
-      ) %>%
-  tab_style(
-    style = cell_fill(color = "lightblue"),
-    locations = cells_body(columns = model16, rows = model16==0)
-  )
+      )
 
 #save
 write_xlsx(aic_table, file=paste0("output/", output_folder, "/aic_table.xlsx"))

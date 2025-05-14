@@ -26,9 +26,6 @@ dat <- bind_rows(dat)
 dat$catch_weight_combined <- ifelse(is.na(dat$catch_weight), dat$cpue_weight, dat$catch_weight)
 dat$catch_count_combined <- ifelse(is.na(dat$catch_numbers), dat$cpue_count, dat$catch_numbers)
 
-#Dataframe for doing depth
-dat_depth <- dat
-
 #Combine NBS & EBS into a BS region?
 combine_bs <- F
 if(combine_bs){
@@ -84,7 +81,7 @@ spatio_temp <- F
 filter_depth <- T
 
 #Name of output folder
-output_folder <- "region_comp"
+output_folder <- "presence_absence"
 
 #Fit models 1-6? (Quadratic depth, not cubic depth)
 quad_depth_m1_6 <- T
@@ -107,12 +104,12 @@ for (h in 1:length(species)) {
   ##Use numbers for all except halibut use weight
   if(this_species=="pacific halibut"){
     dat.2.use$catch <- dat.2.use$catch_weight_combined
-    dat_depth$catch <- dat_depth$catch_weight_combined
-    dat_depth$catch<- replace(dat_depth$catch, dat_depth$catch == "Inf", NA)
+    #Add presence/absence column
+    dat.2.use$presence <- ifelse(dat.2.use$catch_weight_combined>0, 1, 0)
   } else {
     dat.2.use$catch <- dat.2.use$catch_count_combined
-    dat_depth$catch <- dat_depth$catch_count_combined
-    dat_depth$catch <- replace(dat_depth$catch, dat_depth$catch == "Inf", NA)
+    #Add presence/absence column
+    dat.2.use$presence <- ifelse(dat.2.use$catch_count_combined>0, 1, 0)
   }
   
   ##Remove missing catch
@@ -220,23 +217,23 @@ for (h in 1:length(species)) {
     sub$region <- as.factor(as.character(sub$region))
     sub$year <- as.factor(as.character(sub$year))
     
-    saveRDS(sub, file = paste0("output/region_comp/", this_species, "_", dat_names[i], "_dat.rds"))
+    saveRDS(sub, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_dat.rds"))
     
     if(quad_depth_m1_6){
       # Model 1: null
       print(paste(this_species))
       print("fitting m1")
       if(dat_names[i]!="coastwide_iphc"){
-        formula =   "catch ~ -1 + year+survey+log_depth_scaled+ log_depth_scaled2"
+        formula =   "presence ~  -1 + year+survey+log_depth_scaled+ log_depth_scaled2"
         st_type="iid"
       } else {
-        formula = "catch ~ -1 + year+region+survey+log_depth_scaled+ log_depth_scaled2"
+        formula = "presence ~  -1 + year+region+survey+log_depth_scaled+ log_depth_scaled2"
         if(!spatio_temp){
           st_type <- "off"
-          formula = "catch ~ -1 year+ region+survey+log_depth_scaled+ log_depth_scaled2"
+          formula = "presence ~  -1 year+ region+survey+log_depth_scaled+ log_depth_scaled2"
         } else{
           st_type="iid"
-          formula = "catch ~ -1 + year+region +survey+log_depth_scaled+ log_depth_scaled2"
+          formula = "presence ~  -1 + year+region +survey+log_depth_scaled+ log_depth_scaled2"
         }
       }
       start = Sys.time()
@@ -244,7 +241,7 @@ for (h in 1:length(species)) {
         formula = as.formula(formula),
         mesh = spde,
         time = "year",
-        family = tweedie(link = "log"),
+        family =  binomial(link = "logit"),
         data = sub,
         priors = priors,
         share_range = TRUE,
@@ -261,15 +258,15 @@ for (h in 1:length(species)) {
       # Model 2: quadratic temp (uniform across regions)
       print("fitting m2")
       if(dat_names[i]!="coastwide _iphc"){
-        formula =  "catch ~ -1+year+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
+        formula =  "presence ~  -1+year+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula ="catch ~ -1 + year+region+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
+          formula ="presence ~  -1 + year+region+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
         } else{
           st_type="iid"
-          formula ="catch ~ -1 + year+region+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
+          formula ="presence ~  -1 + year+region+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
         }
       }
       start = Sys.time()
@@ -277,7 +274,7 @@ for (h in 1:length(species)) {
         formula = as.formula(formula),
         mesh = spde,
         time = "year",
-        family = tweedie(link = "log"),
+        family =  binomial(link = "logit"),
         data = sub,
         priors = priors,
         share_range = TRUE,
@@ -294,15 +291,15 @@ for (h in 1:length(species)) {
       # Model 3: breakpoint MI low
       print("fitting m3")
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1 +year+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula =   "presence ~  -1 +year+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula = "catch ~ -1 + year+region +survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula = "presence ~  -1 + year+region +survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
         } else{
           st_type="iid"
-          formula = "catch ~ -1 + year+region+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula = "presence ~  -1 + year+region+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
         }
       }
       start = Sys.time()
@@ -310,7 +307,7 @@ for (h in 1:length(species)) {
         formula = as.formula(formula),
         mesh = spde,
         time = "year",
-        family = tweedie(link = "log"),
+        family =  binomial(link = "logit"),
         data = sub,
         priors = priors,
         share_range = TRUE,
@@ -328,22 +325,22 @@ for (h in 1:length(species)) {
       print("fitting m4")
       start = Sys.time()
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1+year +survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula =   "presence ~  -1+year +survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula =  "catch ~ -1 + year+region+survey +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  "presence ~  -1 + year+region+survey +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
         } else{
           st_type="iid"
-          formula =  "catch ~ -1 + year+region+survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  "presence ~  -1 + year+region+survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
         }
       }
       m4 <-try(sdmTMB(
         formula = as.formula(formula),
         mesh = spde,
         time = "year",
-        family = tweedie(link = "log"),
+        family =  binomial(link = "logit"),
         data = sub,
         priors = priors,
         share_range = TRUE,
@@ -361,22 +358,22 @@ for (h in 1:length(species)) {
       print("fitting m5")
       start = Sys.time()
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1+year +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula =   "presence ~  -1+year +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula =  "catch ~ -1 + year+region +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  "presence ~  -1 + year+region +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
         } else{
           st_type="iid"
-          formula =  "catch ~ -1 + region +year+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  "presence ~  -1 + region +year+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
         }
       }
       m5 <- try(sdmTMB(
         formula = as.formula(formula),
         mesh = spde,
         time = "year",
-        family = tweedie(link = "log"),
+        family =  binomial(link = "logit"),
         data = sub,
         priors = priors,
         share_range = TRUE,
@@ -394,22 +391,22 @@ for (h in 1:length(species)) {
       print("fitting m6")
       start = Sys.time()
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1 +year+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula =   "presence ~  -1 +year+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula =  "catch ~ -1 + year+region +survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  "presence ~  -1 + year+region +survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
         } else{
           st_type="iid"
-          formula =  "catch ~ -1 +year+region+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  "presence ~  -1 +year+region+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
         }
       }
       m6 <- try(sdmTMB(
         formula = as.formula(formula),
         mesh = spde,
         time = "year",
-        family = tweedie(link = "log"),
+        family =  binomial(link = "logit"),
         data = sub,
         priors = priors,
         share_range = TRUE,
@@ -429,15 +426,15 @@ for (h in 1:length(species)) {
     print(paste(this_species))
     print("fitting m7")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1+year+survey+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula = "catch ~ -1 + year+region+surveylog_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = "presence ~  -1 + year+region+surveylog_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula = "catch ~ -1 + year+region+survey+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = "presence ~  -1 + year+region+survey+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     start = Sys.time()
@@ -445,7 +442,7 @@ for (h in 1:length(species)) {
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -462,15 +459,15 @@ for (h in 1:length(species)) {
     # Model 8: quadratic temp (uniform across regions)
     print("fitting m8")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =  "catch ~ -1+year+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =  "presence ~  -1+year+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula ="catch ~ -1 + year+region+survey +year+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula ="presence ~  -1 + year+region+survey +year+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula ="catch ~ -1 + year+region+survey +temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula ="presence ~  -1 + year+region+survey +temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     start = Sys.time()
@@ -478,7 +475,7 @@ for (h in 1:length(species)) {
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -495,15 +492,15 @@ for (h in 1:length(species)) {
     # Model 9: breakpoint MI low
     print("fitting m9")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1 +year+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula = "catch ~ -1 + year+region+survey +year+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = "presence ~  -1 + year+region+survey +year+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula = "catch ~ -1 + year+region+survey +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = "presence ~  -1 + year+region+survey +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     start = Sys.time()
@@ -511,7 +508,7 @@ for (h in 1:length(species)) {
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -529,22 +526,22 @@ for (h in 1:length(species)) {
     print("fitting m10")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1 +year+survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =  "catch ~ -1 + year+region+survey+year+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "presence ~  -1 + year+region+survey+year+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula =  "catch ~ -1 + year+region+ survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "presence ~  -1 + year+region+ survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m10 <-try(sdmTMB(
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -562,22 +559,22 @@ for (h in 1:length(species)) {
     print("fitting m11")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1 +year+survey+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =  "catch ~ -1 + year+region+ survey +year+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "presence ~  -1 + year+region+ survey +year+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula =  "catch ~ -1 + year+region+survey +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "presence ~  -1 + year+region+survey +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m11 <- try(sdmTMB(
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -594,10 +591,10 @@ for (h in 1:length(species)) {
     print("fitting m12")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+ year+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1+ year+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
-      formula =  "catch ~ -1 + year+region+survey+year +breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =  "presence ~  -1 + year+region+survey+year +breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
       } else{
@@ -608,7 +605,7 @@ for (h in 1:length(species)) {
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -624,15 +621,15 @@ for (h in 1:length(species)) {
     # Model 13: breakpoint MI low+quad temp
     print("fitting m13")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1 +year+survey+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula = "catch ~ -1 + year+region+survey +year+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = "presence ~  -1 + year+region+survey +year+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula = "catch ~ -1 + year+region+ survey +breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = "presence ~  -1 + year+region+ survey +breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     start = Sys.time()
@@ -640,7 +637,7 @@ for (h in 1:length(species)) {
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -652,16 +649,16 @@ for (h in 1:length(species)) {
       #extra_time = (min_year:max_year)[which(min_year:max_year %in% unique(sub$year) == FALSE)]
     ))
     print( Sys.time() - start )
-    saveRDS(m13, file = paste0("output/",output_folder, "/", this_species, "_", dat_names[i], "_model13.rds"))
+    saveRDS(m13, file = paste0("output/", output_folder, "/", this_species, "_", dat_names[i], "_model13.rds"))
     
     # Model 14: Breakpoint(mi median)
     print("fitting m14")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey+breakpt(mi2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1+year+survey+breakpt(mi2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
-      formula =  "catch ~ -1 + year+region+survey+year +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =  "presence ~  -1 + year+region+survey+year +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       if(!spatio_temp){
         st_type <- "off"
       } else{
@@ -672,7 +669,7 @@ for (h in 1:length(species)) {
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -690,22 +687,22 @@ for (h in 1:length(species)) {
     print("fitting m15")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey +breakpt(mi3_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1+year+survey +breakpt(mi3_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =  "catch ~ -1 + year+region+survey +year+breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "presence ~  -1 + year+region+survey +year+breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula =  "catch ~ -1 + year+region+survey +breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "presence ~  -1 + year+region+survey +breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m15 <- try(sdmTMB(
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,
@@ -722,22 +719,22 @@ for (h in 1:length(species)) {
     print("fitting m16")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   "presence ~  -1+year+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =   "catch ~ -1+year+region+survey +year+breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =   "presence ~  -1+year+region+survey +year+breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula =   "catch ~ -1+year+region+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =   "presence ~  -1+year+region+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m16 <- try(sdmTMB(
       formula = as.formula(formula),
       mesh = spde,
       time = "year",
-      family = tweedie(link = "log"),
+      family =  binomial(link = "logit"),
       data = sub,
       priors = priors,
       share_range = TRUE,

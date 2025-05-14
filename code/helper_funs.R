@@ -2142,3 +2142,15 @@ convert_o2 <- function(o2ml_l, sigma){
 }
 
 rsq <- function(x, y) cor(x,y) * cor(x,y)
+
+#Function to calculate breakpoint effect
+breakpoint_calc <- function(x, b_slope, b_thresh){
+  if (x < b_thresh) {
+    pred = x  * exp(b_slope)
+    #pred = (x-b_thresh) * b_slope
+  } else {
+    pred=b_thresh * exp(b_slope)
+    #pred = 0
+  }
+  return(pred)
+}
