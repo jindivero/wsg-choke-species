@@ -16,8 +16,11 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 #Load functions
 source("code/helper_funs.R")
 
-dat <- ()
-
+#Load data
+files <- list.files(path = "data/processed_data/fish2", pattern = ".rds", full.names=T)
+dat <- map(files,readRDS)
+dat <- bind_rows(dat)
+dat <- filter(dat, common_name=="canary rockfish")
 #remove iphc
 remove_iphc <- T
 if(remove_iphc){
@@ -32,7 +35,6 @@ dat <- filter(dat, O2_umolkg<1500)
 
 dat <- dat  %>%
   drop_na(depth,year, mi1,mi2,mi3, X, Y, catch_weight)
-
 
 #Combine NBS & EBS into a BS region?
 combine_bs <- F

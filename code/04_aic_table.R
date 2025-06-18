@@ -11,10 +11,11 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 source("code/helper_funs.R")
 
 #Output folder
-output_folder <- "presence_absence"
+output_folder <- "region_comp2"
 
 #Models
 models <- c("model7", "model8", "model13", "model14","model15")
+mi_models <- c("model13", "model14", "model15")
 aic_table = as.data.frame(matrix(NA, 1, length(models)+5))
 dat_names <- c("cc", "bc", "goa", "ebs", "coastwide", "cc _iphc", "bc _iphc", "goa _iphc", "ebs _iphc", "coastwide _iphc")
 species <- read_excel("data/species_table.xlsx")
@@ -41,6 +42,14 @@ for(i in 1:length(species)) {
             }
           } else{
             temp[1,j] <- NA
+          }
+          if(this_model %in% mi_models){
+            pars <- as.data.frame(tidy(fit, effects="fixed", conf.int=T))
+            thresh <- filter(pars,grepl("breakpt", term))
+            sd_thresh <- thresh$std.error
+            if(sd_thresh=="NaN"){
+              temp[1,j] <- NA
+            }
           }
         }
       }

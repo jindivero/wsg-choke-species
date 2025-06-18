@@ -1,3 +1,5 @@
+library(sdmTMB)
+library(dplyr)
 ###wd
 setwd("~/Dropbox/GitHub/wsg-choke-species")
 

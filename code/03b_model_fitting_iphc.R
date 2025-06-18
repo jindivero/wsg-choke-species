@@ -26,9 +26,6 @@ dat <- bind_rows(dat)
 dat$catch_weight_combined <- ifelse(is.na(dat$catch_weight), dat$cpue_weight, dat$catch_weight)
 dat$catch_count_combined <- ifelse(is.na(dat$catch_numbers), dat$cpue_count, dat$catch_numbers)
 
-#Dataframe for doing depth
-dat_depth <- dat
-
 #Combine NBS & EBS into a BS region?
 combine_bs <- F
 if(combine_bs){
@@ -47,19 +44,12 @@ if(remove_ai){
   dat <- filter(dat, region!="ai")
 }
 
-#remove iphc
-remove_iphc <- F
-if(remove_iphc){
-  dat <- filter(dat, survey!="iphc")
-}
-
 #Remove other missing rows
 dat <- dat  %>%
   drop_na(depth,year, survey, po2,mi1,mi2,mi3, X, Y)
 
 #Remove weird depths
 dat <- filter(dat, depth>0)
-dat_depth <- filter(dat_depth, depth>0)
 
 #Remove oxygen outliers
 dat <- filter(dat, O2_umolkg<1500)
@@ -76,23 +66,28 @@ dat <- dat %>%
 #Clean up Inf
 dat$catch_weight_combined <- replace(dat$catch_weight_combined, dat$catch_weight_combined == "Inf", NA)
 dat$catch_count_combined <- replace(dat$catch_count_combined, dat$catch_count_combined == "Inf", NA)
+dat$catch_weight_combined <- replace(dat$catch_weight_combined, dat$catch_weight_combined == "NaN", NA)
+dat$catch_count_combined <- replace(dat$catch_count_combined, dat$catch_count_combined == "NaN", NA)
 
 #Spatio-temporal variation--if T, uses IID; if F, adds an annual fixed year effect 
-spatio_temp <- F
+spatio_temp <- T
 
 #Filter depths?
 filter_depth <- T
 
+#Filter latitudes?
+filter_lats <- T
+
 #Name of output folder
-output_folder <- "region_comp"
+output_folder <- "region_comp2"
 
 #Fit models 1-6? (Quadratic depth, not cubic depth)
-quad_depth_m1_6 <- T
+quad_depth_m1_6 <- F
 
 #Fit models 
 cub_depth_m7_16 <- T
 
-#depth info from species table
+#depth & latitude info from species table
 species_table <- read_excel("data/species_table.xlsx")
 species_table$common_name <- tolower(species_table$common_name)
 
@@ -107,12 +102,8 @@ for (h in 1:length(species)) {
   ##Use numbers for all except halibut use weight
   if(this_species=="pacific halibut"){
     dat.2.use$catch <- dat.2.use$catch_weight_combined
-    dat_depth$catch <- dat_depth$catch_weight_combined
-    dat_depth$catch<- replace(dat_depth$catch, dat_depth$catch == "Inf", NA)
   } else {
     dat.2.use$catch <- dat.2.use$catch_count_combined
-    dat_depth$catch <- dat_depth$catch_count_combined
-    dat_depth$catch <- replace(dat_depth$catch, dat_depth$catch == "Inf", NA)
   }
   
   ##Remove missing catch
@@ -125,8 +116,17 @@ for (h in 1:length(species)) {
   #Get depth habitat
   if(filter_depth){
   closest_value <- species_table$depth[species_table$common_name==this_species]
-    
     dat.2.use <- filter(dat.2.use, depth<closest_value)
+  }
+  if(filter_lats){
+    northern_limit <- species_table$northern_limit[species_table$common_name==this_species]
+    southern_limit <- species_table$southern_limit[species_table$common_name==this_species]
+    if(!is.na(northern_limit)){
+      dat.2.use <- filter(dat.2.use, latitude<northern_limit)
+    }
+    if(!is.na(southern_limit)){
+      dat.2.use <- filter(dat.2.use, latitude>southern_limit)
+    }
   }
   
   ##Separate out regions for 
@@ -695,10 +695,10 @@ for (h in 1:length(species)) {
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =  "catch ~ -1 + year+region+survey +year+breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "catch ~ -1 + year+region+survey +year+breakpt(mi3_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       } else{
         st_type="iid"
-        formula =  "catch ~ -1 + year+region+survey +breakpt(po2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  "catch ~ -1 + year+region+survey +breakpt(mi3_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
       }
     }
     m15 <- try(sdmTMB(

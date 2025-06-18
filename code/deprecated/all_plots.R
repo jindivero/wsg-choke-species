@@ -1791,4 +1791,294 @@ for(i in 1:length(species)){
   
 }
 
+###-----Calculating weighted average and weighted average: single prediction, weighted average +- weighted SE (SE of predictions)
+for(i in 1:length(species)){
+  this_species <- species[i]
+  print(this_species)
+  preds2 <- dat_pred
+  #Calculate metabolic index from correct taxa parameters
+  #Pull correct 
+  mi_pars <- read.csv("data/taxa_table.csv")
+  mi_pars$Group <- tolower(mi_pars$Group)
+  this_taxa <- taxa$MI_Taxa[taxa$common_name==this_species]
+  mi_pars <- filter(mi_pars,Group==this_taxa)
+  
+  Eo <- c(mi_pars$Eolow, mi_pars$Eo, mi_pars$Eohigh)
+  
+  #Calculate metabolic index for species
+  preds2$mi1 <- calc_mi(po2=preds2$po2, inv.temp=preds2$invtemp, Eo=Eo[1],fancy=F)
+  preds2$mi2 <- calc_mi(po2=preds2$po2, inv.temp=preds2$invtemp, Eo=Eo[2],fancy=F)
+  preds2$mi3 <- calc_mi(po2=preds2$po2, inv.temp=preds2$invtemp, Eo=Eo[3],fancy=F)
+  
+  #List of data types to pull
+  this_aic <- filter(aic, species==this_species)
+  datnames <- unique(this_aic$`data type`)
+  #For each data type, pull all of the models that did fit
+  for (j in 1:length(datnames)){
+    this_dat <- datnames[j]
+    print(this_dat)
+    #Pull the data file for scaling
+    this_datframe <- try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
+    #Mean and sd for scaling temp
+    mean_temp <- mean(this_datframe$temperature_C, na.rm=T)
+    sd_temp <- sd(this_datframe$temperature_C, na.rm=T)
+    #Mean and sd for scaling MIs
+    mean_mi1 <- mean(this_datframe$mi1, na.rm=T)
+    sd_mi1 <- sd(this_datframe$mi1, na.rm=T)
+    mean_mi2 <- mean(this_datframe$mi2, na.rm=T)
+    sd_mi2 <- sd(this_datframe$mi2, na.rm=T)
+    mean_mi3 <- mean(this_datframe$mi3, na.rm=T)
+    sd_mi3 <- sd(this_datframe$mi3, na.rm=T)
+    #Scale prediction data
+    preds <- preds2
+    preds$temp_scaled <- (preds$temperature_C-mean_temp)/sd_temp
+    preds$temp_scaled2 <- (preds$temp_scaled)^2
+    preds$mi1_s <- (preds$mi1-mean_mi1)/sd_mi1
+    preds$mi2_s <- (preds$mi2-mean_mi2)/sd_mi2
+    preds$mi3_s <- (preds$mi3-mean_mi3)/sd_mi3
+    #Change survey if NWFSC not present in the survey
+    surveys <- unique(this_datframe$survey)
+    #if surveys does not contain nwfsc in list
+    if(!"nwfsc" %in% surveys){
+      preds$survey <- surveys[1]
+    }
+    #Change year if 2022 not in the survey
+    years <- unique(this_datframe$year)
+    if(!2022 %in% surveys){
+      preds$year <- years[1]
+    }
+    regions <- unique(this_datframe$region)
+    if(!"cc"%in% regions){
+      preds$region <- regions[1]
+    }
+    #Filter AIC table to the datatype to figure out which models to pull
+    this_aic <- filter(aic, species==this_species, `data type`==this_dat)
+    #Just the first 5 columns
+    this_aic <- this_aic[,1:(ncol(this_aic)-5)]
+    #Only the columns that are not NAs (which means they didn't pass sanity checks)
+    this_aic <- this_aic[,colSums(is.na(this_aic))<nrow(this_aic)]
+    #Get list of these columns (these are the model fits to pull for model averaging)
+    models <- colnames(this_aic)
+    if(length(models)>0){
+      #Pull the model output files
+      model_fits <- list()
+      for(h in 1:length(models)){
+        fit <- try(readRDS(file = paste0("output/", output_folder,"/", this_species,"_",this_dat,"_", models[h], ".rds")))
+        model_fits[[h]] <- fit
+      }
+      names(model_fits) <- models
+      
+      #Get model weights
+      #Loop across columns in this_aic
+      aics <- list()
+      for (k in 1:ncol(this_aic)){
+        aic_models <- AIC(model_fits[[k]])
+        aics[[k]] <- aic_models
+      }
+      aics <- unlist(aics)
+      delta_aic <- aics - min(aics)
+      weights <- exp(-0.5 * delta_aic) / sum(exp(-0.5 * delta_aic))
+      
+      #Predictions
+      sims <- list()
+      set.seed(459384) # for reproducibility and consistency
+      for (g in 1:length(models)){
+        print(models[g])
+        sim <- predict(model_fits[[g]], newdata=preds, return_tmb_object = F, se_fit=T, re_form=NA)
+        sim$weight <- weights[g]
+        if(g==1){
+          sims <- sim
+        }
+        if(g>1){
+          sims <- bind_rows(sims, sim)
+        }
+      }
+      
+      #Calculate weighted average
+      ens_preds <- sims %>% 
+        mutate(est_se1=est-est_se, est_se2=est+est_se) %>%
+        group_by(pred_id) %>% 
+        summarise(ens_est=weighted.mean(est,weight), ens_est_se1=weighted.mean(est_se1,weight), ens_est_se2=weighted.mean(est_se2,weight)) %>% 
+        ungroup()
+      #Ensemble mean and SE
+      preds$ensemble_mean <- exp(ens_preds$ens_est)
+      preds$ensemble_mean_lower <- exp(ens_preds$ens_est_se1)
+      preds$ensemble_mean_upper <- exp(ens_preds$ens_est_se2)
+      #Scaled
+      preds <- preds %>%
+        mutate(ensemble_mean_sc= (ensemble_mean/max(ensemble_mean, na.rm=T)),
+               ensemble_mean_lower_sc = (ensemble_mean_lower)/max(ensemble_mean, na.rm=T),
+               ensemble_mean_upper_sc = (ensemble_mean_upper)/max(ensemble_mean, na.rm=T))
+      preds$species <- this_species
+      preds$data <- this_dat
+      if(j==1){
+        all_preds <- preds}
+      if(j>1){
+        all_preds <- bind_rows(all_preds, preds)
+      }
+    }
+  }
+  if(i==1){
+    all_preds2 <- all_preds}
+  if(i>1){
+    all_preds2 <- bind_rows(all_preds2, all_preds)
+  }
+}
+
+###-----Calculating weighted average and weighted average +- weighted SE (SE of predictions)
+for(i in 1:length(species)){
+  this_species <- species[i]
+  print(this_species)
+  preds2 <- dat_pred
+  #Calculate metabolic index from correct taxa parameters
+  #Pull correct 
+  mi_pars <- read.csv("data/taxa_table.csv")
+  mi_pars$Group <- tolower(mi_pars$Group)
+  this_taxa <- taxa$MI_Taxa[taxa$common_name==this_species]
+  mi_pars <- filter(mi_pars,Group==this_taxa)
+  
+  Eo <- c(mi_pars$Eolow, mi_pars$Eo, mi_pars$Eohigh)
+  
+  #Calculate metabolic index for species
+  preds2$mi1 <- calc_mi(po2=preds2$po2, inv.temp=preds2$invtemp, Eo=Eo[1],fancy=F)
+  preds2$mi2 <- calc_mi(po2=preds2$po2, inv.temp=preds2$invtemp, Eo=Eo[2],fancy=F)
+  preds2$mi3 <- calc_mi(po2=preds2$po2, inv.temp=preds2$invtemp, Eo=Eo[3],fancy=F)
+  
+  #List of data types to pull
+  this_aic <- filter(aic, species==this_species)
+  datnames <- unique(this_aic$`data type`)
+  #For each data type, pull all of the models that did fit
+  for (j in 1:length(datnames)){
+    this_dat <- datnames[j]
+    print(this_dat)
+    #Pull the data file for scaling
+    this_datframe <- try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_dat, "_dat.rds")))
+    #Mean and sd for scaling temp
+    mean_temp <- mean(this_datframe$temperature_C, na.rm=T)
+    sd_temp <- sd(this_datframe$temperature_C, na.rm=T)
+    #Mean and sd for scaling MIs
+    mean_mi1 <- mean(this_datframe$mi1, na.rm=T)
+    sd_mi1 <- sd(this_datframe$mi1, na.rm=T)
+    mean_mi2 <- mean(this_datframe$mi2, na.rm=T)
+    sd_mi2 <- sd(this_datframe$mi2, na.rm=T)
+    mean_mi3 <- mean(this_datframe$mi3, na.rm=T)
+    sd_mi3 <- sd(this_datframe$mi3, na.rm=T)
+    #Scale prediction data
+    preds <- preds2
+    preds$temp_scaled <- (preds$temperature_C-mean_temp)/sd_temp
+    preds$temp_scaled2 <- (preds$temp_scaled)^2
+    preds$mi1_s <- (preds$mi1-mean_mi1)/sd_mi1
+    preds$mi2_s <- (preds$mi2-mean_mi2)/sd_mi2
+    preds$mi3_s <- (preds$mi3-mean_mi3)/sd_mi3
+    #Change survey if NWFSC not present in the survey
+    surveys <- unique(this_datframe$survey)
+    #if surveys does not contain nwfsc in list
+    if(!"nwfsc" %in% surveys){
+      preds$survey <- surveys[1]
+    }
+    #Change year if 2022 not in the survey
+    years <- unique(this_datframe$year)
+    if(!2022 %in% surveys){
+      preds$year <- years[1]
+    }
+    regions <- unique(this_datframe$region)
+    if(!"cc"%in% regions){
+      preds$region <- regions[1]
+    }
+    #Filter AIC table to the datatype to figure out which models to pull
+    this_aic <- filter(aic, species==this_species, `data type`==this_dat)
+    #Just the first 5 columns
+    this_aic <- this_aic[,1:(ncol(this_aic)-5)]
+    #Only the columns that are not NAs (which means they didn't pass sanity checks)
+    this_aic <- this_aic[,colSums(is.na(this_aic))<nrow(this_aic)]
+    #Get list of these columns (these are the model fits to pull for model averaging)
+    models <- colnames(this_aic)
+    if(length(models)>0){
+      #Pull the model output files
+      model_fits <- list()
+      for(h in 1:length(models)){
+        fit <- try(readRDS(file = paste0("output/", output_folder,"/", this_species,"_",this_dat,"_", models[h], ".rds")))
+        model_fits[[h]] <- fit
+      }
+      names(model_fits) <- models
+      
+      #Get model weights
+      #Loop across columns in this_aic
+      aics <- list()
+      for (k in 1:ncol(this_aic)){
+        aic_models <- AIC(model_fits[[k]])
+        aics[[k]] <- aic_models
+      }
+      aics <- unlist(aics)
+      delta_aic <- aics - min(aics)
+      weights <- exp(-0.5 * delta_aic) / sum(exp(-0.5 * delta_aic))
+      
+      #Predictions
+      sims <- list()
+      set.seed(459384) # for reproducibility and consistency
+      for (g in 1:length(models)){
+        print(models[g])
+        sim <- predict(model_fits[[g]], newdata=preds, return_tmb_object = F, se_fit=T, re_form=NA)
+        sim$weight <- weights[g]
+        if(g==1){
+          sims <- sim
+        }
+        if(g>1){
+          sims <- bind_rows(sims, sim)
+        }
+      }
+      
+      #Calculate weighted average
+      ens_preds <- sims %>% 
+        mutate(est_se1=est-est_se, est_se2=est+est_se) %>%
+        group_by(pred_id) %>% 
+        summarise(ens_est=weighted.mean(est,weight), ens_est_se1=weighted.mean(est_se1,weight), ens_est_se2=weighted.mean(est_se2,weight)) %>% 
+        ungroup()
+      #Ensemble mean and SE
+      preds$ensemble_mean <- exp(ens_preds$ens_est)
+      preds$ensemble_mean_lower <- exp(ens_preds$ens_est_se1)
+      preds$ensemble_mean_upper <- exp(ens_preds$ens_est_se2)
+      #Scaled
+      preds <- preds %>%
+        mutate(ensemble_mean_sc= (ensemble_mean/max(ensemble_mean, na.rm=T)),
+               ensemble_mean_lower_sc = (ensemble_mean_lower)/max(ensemble_mean, na.rm=T),
+               ensemble_mean_upper_sc = (ensemble_mean_upper)/max(ensemble_mean, na.rm=T))
+      preds$species <- this_species
+      preds$data <- this_dat
+      if(j==1){
+        all_preds <- preds}
+      if(j>1){
+        all_preds <- bind_rows(all_preds, preds)
+      }
+    }
+  }
+  if(i==1){
+    all_preds2 <- all_preds}
+  if(i>1){
+    all_preds2 <- bind_rows(all_preds2, all_preds)
+  }
+}
+
+
+###With a bunch of simulations, just for the MI models to see if that helps
+for (g in 1:length(models)){
+  sim <- predict(model_fits[[g]], newdata=preds, return_tmb_object = F, se_fit=F, re_form=NA, sims=100)
+  sim <- sim*weights[g]
+  if(g==1){
+    sims <- sim
+  }
+  if(g>1){
+    #Ensemble, add them together
+    sims <- sims+sim
+  }
+}
+
+#Add ensemble mean to the prediction dataset (the conditional effect), and exponentiate
+preds$ensemble_mean_sims <- exp(rowMeans(sims))
+
+ensemble_ci <- t(apply(sims, 1, quantile, probs = c(0.025, 0.975)))
+preds$ensemble_sims_lower <- exp(ensemble_ci[,1])
+preds$ensemble_sims_upper <- exp(ensemble_ci[,2])
+
+
 #Plot residuals?
