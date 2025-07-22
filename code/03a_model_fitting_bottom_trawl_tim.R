@@ -118,7 +118,7 @@ model.fit <- readRDS("code/model_fit_augmented.RDS")
 pcrit_type = "smr"
 W = 1000
 
-#fit models
+#Get o2 obs for each species
 dats <- list()
 for (h in 1:length(species)) {
   this_species = species[h]
@@ -157,6 +157,11 @@ for (h in 1:length(species)) {
 
 
   
+
+
+##Not edited below here##
+
+##Run models
   ##Separate out regions for 
   #Make list to store filtered data
   subs <- list()
