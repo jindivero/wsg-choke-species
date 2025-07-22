@@ -12,6 +12,15 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 #Load functions
 source("code/helper_funs.R")
 
+#Output folder
+output_folder <- "region_comp"
+
+#ggplot themes
+theme_set(theme_bw(base_size = 18))
+theme_update(panel.grid.major = element_blank(),
+             panel.grid.minor = element_blank(),
+             strip.background = element_blank())
+
 ###Oxygen data
 ##Combine with in situ data
 insitu <- readRDS("data/processed_data/o2/insitu_combined.rds")
@@ -56,6 +65,34 @@ region_list <- region_list[-1]
 
 #Log depth
 dat$depth_ln <- log(dat$depth)
+
+#Plot O2 by depth in each region
+dat <- filter(dat, region!="ai")
+dat$region <- factor(dat$region, levels=c("ebs", "goa", "bc", "cc", "coastwide"))
+labs <- c("Eastern Bering Sea", "Gulf of Alaska", "British Columbia", "California Current", "Coastwide")
+names(labs) <- c("ebs", "goa", "bc", "cc", "coastwide")
+ggplot(dat, aes(x=po2, y=depth))+
+  geom_point(aes(colour=temperature_C))+
+  facet_wrap("region", labeller = as_labeller(labs), scales="free_x")+
+  scale_colour_viridis(option="inferno", name="Temperature (C)")+
+  scale_y_reverse()+
+  xlab("Partial Pressure Oxygen (kPa)")+
+  ylab("Depth (m)")+
+  theme(legend.position = "top")
+
+ggsave(
+  paste0("output/", output_folder, "/plots_final/O2_depth_temp.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 8.5,
+  height= 8.5,
+  units = c("in"),
+  bg="white",
+  dpi = 600,
+  limitsize = TRUE
+)
 
 #Fit model just to year (each region sep)
 year_models <- list()

@@ -8,6 +8,7 @@ library(pals)
 library(purrr)
 library(gt)
 library(openxlsx2)
+library(worrms)
 
 set.seed(9876)
 
@@ -15,6 +16,7 @@ setwd("~/Dropbox/GitHub/wsg-choke-species")
 
 #Load functions
 source("code/helper_funs.R")
+source("code/fit_model_funs.R")
 
 #Load data
 files <- list.files(path = "data/processed_data/fish2", pattern = ".rds", full.names=T)
@@ -78,25 +80,51 @@ filter_depth <- T
 filter_lats <- T
 
 #Name of output folder
-output_folder <- "region_comp2"
+output_folder <- "prob_o2"
 
 #Fit models 1-6? (Quadratic depth, not cubic depth)
 quad_depth_m1_6 <- T
 
 #Fit models 
-cub_depth_m7_16 <- F
+cub_depth_m7_16 <- T
 
 #depth & latitude info from species table
 species_table <- read_excel("data/species_table.xlsx")
 species_table$common_name <- tolower(species_table$common_name)
 
-#Create dataframe to keep track of what's happening
+# function to streamline code.  Calculate P(po2 > pcrit) for each row of dataframe
+update_df <- function(species_df, taxa.name, w, pcrit_type = "smr", rep, ParentChild_gz) {
+  # get parameter estimates
+  taxa_estimates <- estimate_taxa(taxa.name, 
+                                  w = w ,
+                                  temperature = 10,
+                                  method = pcrit_type,
+                                  rep  = model.fit$rep, 
+                                  ParentChild_gz = model.fit$ParentChild_gz)
+  # use pmap to run calc_p_po2
+  betas <- taxa_estimates$parameters[,1]
+  var_covar <- taxa_estimates$var_covar
+  species_df$p_pcrit <- pmap_dbl(list(po2 = species_df$po2, temp = species_df$temperature_C),
+                                 ~calc_p_po2(po2 = ..1, temp = ..2, w = w,  pcrit_type = pcrit_type, betas = betas, var_covar = var_covar)
+  )
+  
+  return(species_df)
+}
+
+# get fitted model (for probability pO2)
+model.fit <- readRDS("code/model_fit_augmented.RDS")
+
+# calculate probability that each location po2 exceeds pcrit for each species
+pcrit_type = "smr"
+W = 1000
 
 #fit models
+dats <- list()
 for (h in 1:length(species)) {
   this_species = species[h]
   print(this_species)
   dat.2.use <- dplyr::filter(dat, common_name == this_species)
+  taxa.name <- str_to_sentence(species_table$scientific_name[species_table$common_name==this_species])
   
   #Years for adding extra_time later
   min_year <- min(dat.2.use$year)
@@ -119,7 +147,16 @@ for (h in 1:length(species)) {
     if(!is.na(southern_limit)){
       dat.2.use <- filter(dat.2.use, latitude>southern_limit)
     }
-    }
+  }
+  
+  #Calculate probability pO2
+  print(taxa.name)
+  dat.2.use <- try(update_df(dat.2.use, taxa.name, pcrit_type = pcrit_type, w = W,model.fit$rep, model.fit$ParentChild_gz))
+  dats[[i]] <- dat.2.use
+  }
+
+
+  
   ##Separate out regions for 
   #Make list to store filtered data
   subs <- list()

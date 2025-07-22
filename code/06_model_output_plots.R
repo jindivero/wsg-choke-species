@@ -17,6 +17,7 @@ library(mapview)
 library(openxlsx)
 library(parallel)
 library(ggpubr)
+library(stats)
 
 set.seed(9876)
 
@@ -52,9 +53,10 @@ taxa <- read_excel("data/species_table.xlsx")
 taxa$MI_Taxa <- tolower(taxa$MI_Taxa)
 taxa$common_name <- tolower(taxa$common_name)
 
-#Load AIC table for model output
-aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx")))
-#Make first 6 columns in AIC numeric
+#Load aic table for model output
+#aic <- as.data.frame(read_excel(paste0("output/",output_folder, "/aic_table.xlsx")))
+aic <- readRDS(file = paste0("output/", output_folder, "/aic_table.rds"))
+#Make first 6 columns in aic numeric
 aic[,1:(ncol(aic)-5)] <- sapply(aic[,1:(ncol(aic)-5)], as.numeric)
 
 ##Set up mapping
@@ -142,7 +144,7 @@ for(i in 1:length(species)){
     preds$mi2_s <- (preds$mi2-mean_mi2)/sd_mi2
     preds$mi3_s <- (preds$mi3-mean_mi3)/sd_mi3
     
-    #Filter AIC table to the datatype to figure out which models to pull
+    #Filter aic table to the datatype to figure out which models to pull
     this_aic <- filter(aic, species==this_species, `data type`==this_dat)
     #Just the first 5 columns
     this_aic <- this_aic[,1:(ncol(this_aic)-5)]
@@ -161,7 +163,7 @@ for(i in 1:length(species)){
         #Get model weights
         aics <- list()
         for (k in 1:length(models)){
-          aic_models <- AIC(model_fits[[k]])
+          aic_models <- stats::AIC(model_fits[[k]])
           aics[[k]] <- aic_models
         }
         aics <- unlist(aics)
@@ -338,7 +340,7 @@ for(i in 1:length(species_o2)){
     mean_mi3 <- mean(this_datframe$mi3, na.rm=T)
     sd_mi3 <- sd(this_datframe$mi3, na.rm=T)
     
-    #Filter AIC table to the datatype to figure out which models to pull
+    #Filter aic table to the datatype to figure out which models to pull
     this_aic <- filter(aic, species==this_species, `data type`==this_dat)
     #Just the first 5 columns
     this_aic <- this_aic[,1:(ncol(this_aic)-5)]
@@ -474,7 +476,7 @@ saveRDS(bp_est, file = paste0("output/", output_folder, "/breakpoint_estimates.r
 bp_save <- select(bp_est, species, region, data_type, bp_ensemble_mean, bp_ensemble_sd, slope_ensemble_mean,slope_ensemble_sd)
 write.csv(bp_save, file = paste0("output/", output_folder, "/breakpoint_estimates.csv"), row.names=F)
 
-#Combine with AIC and save
+#Combine with aic and save
 aic_full$data_type <- ifelse(grepl("iphc", aic_full$`data type`), "bottom trawl & IPHC", "bottom trawl only")
 aic_full$region <- case_when(
   grepl("ebs", aic_full$`data type`) ~ "ebs",
@@ -504,8 +506,9 @@ ggplot(filter(all_preds2, id %in% bp_est$id), aes(x=po2, y=ensemble_mean_sc))+
   geom_line(aes(colour=region, linetype=data_type))+
   geom_ribbon(aes(ymin=ensemble_mean_lower_sc, ymax=ensemble_mean_upper_sc, fill=region), alpha=0.2)+
   facet_wrap("species", ncol=4, scales="free_y", labeller=labeller(species=label_wrap_gen(15)))+
-  theme(legend.position="top")+
-  theme(legend.title=element_blank())+
+  theme(legend.title=element_blank(), 
+        legend.box.spacing = unit(0, "pt"),
+        legend.position="top")+
   theme(text=element_text(size=15))+
   scale_colour_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677", "#332288"), drop=FALSE, labels=labs)+
   scale_fill_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677", "#332288"), drop=FALSE, labels=labs)+
@@ -520,8 +523,8 @@ ggsave(
   device = NULL,
   path = NULL,
   scale = 1,
-  width = 8.5,
-  height =11,
+  width = 9,
+  height= 8,
   units = c("in"),
   bg="white",
   dpi = 600,
@@ -615,6 +618,96 @@ ggsave(
   device = NULL,
   path = NULL,
   scale = 1,
+  width =9.5,
+  height =8.5,
+  units = c("in"),
+  bg="white",
+  dpi = 600,
+  limitsize = TRUE
+)
+
+##Line plot
+bp_est$id <- paste(bp_est$species, bp_est$data, sep="_")
+ggplot(filter(bp_est, id %in% unique(bp_est2$id)), aes(y=species, x=bp_ensemble_mean, colour=region))+
+  #facet_grid(rows="species", scales="free_y", space="free_y", switch="y")+
+  geom_point(aes(colour=region, shape=data_type), size=3, position=ggstance::position_dodgev(height=0.4))+
+  #Can add back shape
+  geom_linerange(aes(xmin = ensemble_lower, xmax = ensemble_upper, colour=region),  position=ggstance::position_dodgev(height=0.4), size=1, alpha=0.5)+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text=element_text(size=12))+
+  theme(legend.position="top")+
+  theme(legend.title=element_blank())+
+  theme(text=element_text(size=15))+
+  #xlim(-1,10)+
+  scale_colour_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677", "#332288"), drop=FALSE)+
+  guides( color = guide_legend(nrow = 1), shape = guide_legend(nrow = 1))+
+  theme(legend.box = "vertical",
+        legend.spacing.y = unit(0, "pt"),
+        legend.key.height = unit(0.25, "lines"), #Minimize legend space
+        panel.spacing = unit(5, "lines"))+ #Make more space between species
+  #scale_shape_discrete(labels=c("low Eo", "median Eo", "high Eo"))+
+  xlab("Temperature-Corrected Oxygen Threshold (kPa)")+
+  ylab("")
+#geom_vline(xintercept=0, linetype="dashed")+
+# geom_vline(xintercept=1, linetype="dashed")
+
+ggsave(
+  paste0("output/", output_folder, "/plots_final/threshold_est_filtered_onedat.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width =9.5,
+  height =8.5,
+  units = c("in"),
+  bg="white",
+  dpi = 600,
+  limitsize = TRUE
+)
+#Evaluate data richness
+aic_full$N_pos_catch <- NA
+aic_full$sd_o2 <- NA
+for(i in 1:nrow(aic_full)) {
+  this_species <- aic_full$species[i]
+  this_data <- aic_full$'data type'[i]
+  print(this_species)
+  #Pull data
+  this_datframe <- try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_data, "_dat.rds")))
+  #Count number of positive catches
+  aic_full$N_pos_catch[i] <- try(as.numeric(nrow(filter(this_datframe, catch>0))))
+  #SD of oxygen
+  aic_full$sd_o2[i] <- try(sd(as.numeric(this_datframe$O2_umolkg, na.rm=T)))
+  aic_full$low_o2[i] <- try(min(as.numeric(this_datframe$O2_umolkg, na.rm=T)))
+}
+
+#Plot
+aic2 <- aic_full
+aic2$data <- aic2$`data type`
+#Combine with bp est
+aic2 <- left_join(aic2, bp_est[,c("species", "data", "bp_ensemble_mean")], by=c("species", "data"))
+aic2$mi_models <- ifelse(is.na(aic2$bp_ensemble_mean), "No Threshold", "Threshold")
+#Make numeric
+aic2$N_pos_catch <- as.numeric(aic2$N_pos_catch)
+aic2$sd_o2 <- as.numeric(aic2$sd_o2)
+#Calculate ratio of positive catch to SD
+aic2$ratio <- aic2$N_pos_catch/aic2$sd_o2
+
+#Plot
+ggplot(aic2, aes(x=sd_o2, y=N_pos_catch))+
+geom_point(aes(colour=mi_models), size=3, alpha=0.5)+
+  facet_wrap("data", scales="free", ncol=2)+
+  xlab("SD of Oxygen (umol/kg)")+
+  ylab("Number of Positive Catches")+
+  theme(legend.title=element_blank(), legend.position="top")
+
+ggsave(
+  paste0("output/", output_folder, "/plots_final/breakpoint_estimates_filtered.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
   width = 8.5,
   height =8.5,
   units = c("in"),
@@ -622,6 +715,97 @@ ggsave(
   dpi = 600,
   limitsize = TRUE
 )
+
+ggplot(aic2, aes(x=mi_models, y=sd_o2))+
+geom_boxplot(aes(colour=mi_models))+
+facet_wrap("data", scales="free", ncol=2)+
+  ylab("SD of Oxygen (umol/kg)")+
+  theme(legend.title=element_blank(), legend.position="top")
+
+ggsave(
+  paste0("output/", output_folder, "/plots_final/oxygen_sd_boxplot.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 5,
+  height =11,
+  units = c("in"),
+  bg="white",
+  dpi = 600,
+  limitsize = TRUE
+)
+
+ggplot(aic2, aes(x=mi_models, y=N_pos_catch))+
+  geom_boxplot(aes(colour=mi_models))+
+  facet_wrap("data", scales="free", ncol=2)+
+  ylab("Number of Positive Catches")+
+  theme(legend.title=element_blank(), legend.position="top")
+
+ggsave(
+  paste0("output/", output_folder, "/plots_final/pos_catch_boxplot.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 5,
+  height =11,
+  units = c("in"),
+  bg="white",
+  dpi = 600,
+  limitsize = TRUE
+)
+
+###Evaluate depth effects
+#Depth sequence
+for(i in 1:nrow(bp_est)) {
+  this_species <- bp_est$species[i]
+  this_data <- bp_est$data[i]
+  print(this_species)
+  print(this_data)
+  #Pull model fit
+  this_fit <- try(readRDS(file = paste0("output/", output_folder,"/", this_species,"_",this_data,"_model15.rds")))
+  this_dat <- try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_data, "_dat.rds")))
+  if(class(this_fit)!="try-error"){
+    pars <- as.data.frame(tidy(this_fit, effects="fixed", conf.int=T))
+    depth1 <- filter(pars,term=="log_depth_scaled")
+    depth1 <- depth1$estimate
+    depth2 <- filter(pars,term=="log_depth_scaled2")
+    depth2 <- depth2$estimate
+    depth3 <- filter(pars,term=="log_depth_scaled3")
+    depth3 <- depth3$estimate
+    
+    #Sequence of depths
+    depth_seq <- as.data.frame(seq(min(this_dat$log_depth_scaled, na.rm=T), max(this_dat$log_depth_scaled, na.rm=T), length.out=100))
+    colnames(depth_seq) <- "depth_seq1"
+    depth_seq$depth_seq2 <- depth_seq$depth_seq1^2
+    depth_seq$depth_seq3 <- depth_seq$depth_seq1^3
+    
+    #Calculate conditional effect
+    depth_seq$effect <- depth1*depth_seq$depth_seq1 + depth2*depth_seq$depth_seq2 + depth3*depth_seq$depth_seq3
+ 
+    #Plot and save
+    ggplot(depth_seq, aes(x=depth_seq1, y=exp(effect)))+
+      geom_line()+
+      xlab("Log Depth (scaled)")+
+      ylab("Conditional Effect on Fish Density")+
+      ggtitle(paste(this_species, this_data))+
+      theme(text=element_text(size=15))
+    
+    ggsave(
+      paste0("output/", output_folder, "/depth_conditional_effects/", this_species, "_", this_data, "_depth_conditional_effects.png"),
+      plot = last_plot(),
+      device = NULL,
+      path = NULL,
+      scale = 1,
+      width = 8.5,
+      height = 5,
+      units = c("in"),
+      bg="white",
+      dpi = 600,
+      limitsize = TRUE
+    )
+  }
 
 ##-----Historical observations and conditional effects
 bp_est2 <- readRDS(paste0("output/", output_folder, "/breakpoint_estimates_filtered.rds"))
@@ -703,9 +887,14 @@ for(i in 1:nrow(bp_est2)){
   if(!is.na(southern_limit)){
     preds <- filter(preds, latitude>southern_limit)
   }
-  
-  #Pull the data file for scaling
+  #Pull the data file for scaling and region filtering
   this_datframe <- try(readRDS(file = paste0("output/", output_folder, "/", this_species, "_", this_data, "_dat.rds")))
+  
+  #Filter out ebs if not in these_regions
+  if(this_species=="lingcod"|this_species=="canary rockfish"|this_species=="yellowtail rockfish"){
+    preds <- filter(preds, region!="ebs")
+  }
+  
   #Mean and sd for unscaling MIs
   mean_mi1 <- mean(this_datframe$mi1, na.rm=T)
   sd_mi1 <- sd(this_datframe$mi1, na.rm=T)
@@ -741,7 +930,7 @@ for(i in 1:nrow(bp_est2)){
   #Get model weights
   aics <- list()
   for (k in 1:length(models)){
-  aic_models <- AIC(model_fits[[k]])
+  aic_models <- stats::AIC(model_fits[[k]])
   aics[[k]] <- aic_models
   }
  aics <- unlist(aics)
@@ -842,7 +1031,6 @@ for(i in 1:nrow(bp_est2)){
 }
 
 saveRDS(all_obs, file=paste0("output/", output_folder, "/", "conditional_effects_obs_points_all.rds"))
-all_obs <- readRDS(paste0("output/", output_folder, "/", "conditional_effects_obs_points_all"))
 
 ##Plot just coastwide species, on one plot
 dat2plot <- filter(all_obs, grepl("coastwide", data))
@@ -864,8 +1052,7 @@ ggplot(us_coast_proj) + geom_sf() +
   ylab("Latitude")+
   theme(legend.position="top", legend.text = element_text(angle = 45, hjust = 1),legend.justification="center",
         legend.box.spacing = unit(0, "pt"), panel.spacing = unit(1.2, "lines"))+
-  #scale_colour_viridis(name="Reduction in biomass")
-  scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+  scale_colour_viridis(name="Reduction in \n local density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/map_coastwide_species_combined.png"),
@@ -899,8 +1086,8 @@ ggplot(us_coast_proj) + geom_sf() +
   ylab("Latitude")+
   theme(legend.position="top", legend.text = element_text(angle = 45, hjust = 1), legend.justification="center",
         legend.box.spacing = unit(0, "pt"))+
-  #scale_colour_viridis(name="Reduction in biomass")
-  scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+  #scale_colour_viridis(name="Reduction in ")
+  scale_colour_viridis(name="Reduction in \nlocal density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
 #  limits=c(0,1), breaks=c(0,0.25, 0.5, 0.75,1), labels=c(0,0.25,0.5,0.75,1), oob = scales::squish)
 
 ggsave(
@@ -936,8 +1123,7 @@ for(i in 1:length(toplot)) {
     ylab("Latitude")+
     theme(legend.position=c(0.92,0.1), panel.spacing = unit(1, "lines"))+
     ggtitle(this_species)+
-    #scale_colour_viridis(name="Reduction in biomass")
-    scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+    scale_colour_viridis(name="Reduction in \nlocal density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
   #  limits=c(0,1), breaks=c(0,0.25, 0.5, 0.75,1), labels=c(0,0.25,0.5,0.75,1), oob = scales::squish)
   
   ggsave(
@@ -954,20 +1140,23 @@ for(i in 1:length(toplot)) {
   )
 }
 
-#Plot annually with line where observation below
-dat2use <- filter(all_obs, common_name=="walleye pollock"|common_name=="sablefish")
+#Plot observations with example species
+dat2use <- filter(all_obs, common_name=="walleye pollock"|common_name=="pacific cod")
 dat2use$region <- factor(dat2use$region, levels=c("ebs", "goa", "bc", "cc"))
 labs <- c("Eastern Bering Sea", "Gulf of Alaska", "British Columbia", "California Current")
+dat2use <- filter(dat2use, year=="2012"|year=="2015"|year=="2023")
 names(labs) <- c("ebs", "goa", "bc", "cc")
 bp_est2$common_name <- bp_est2$species
 ggplot(dat2use, aes(x=po2))+
   geom_density(aes(colour=region))+
-  facet_wrap("common_name", ncol=1)+
+  facet_grid(year~common_name)+
   theme(legend.position="top")+
-  xlab("Dissolved Oxygen (pO2)")+
+  xlab("Oxygen (kPa)")+
 guides(color = guide_legend(nrow = 2))+
-  geom_vline(filter(bp_est2, species %in% unique(dat2use$common_name)&region=="goa"), mapping=aes(xintercept=bp_ensemble_mean), linetype="dashed")+
-  scale_colour_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677"), drop=FALSE, labels=labs )
+  geom_vline(filter(bp_est2, species %in% unique(dat2use$common_name)&(region=="goa"|region=="coastwide")), mapping=aes(xintercept=bp_ensemble_mean), linetype="dashed")+
+  scale_colour_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677"), drop=FALSE, labels=labs, name="")+
+  ylab("Density")
+
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/density_obs_example.png"),
@@ -975,8 +1164,8 @@ ggsave(
   device = NULL,
   path = NULL,
   scale = 1,
-  width = 5,
-  height = 6,
+  width = 8,
+  height = 7,
   units = c("in"),
   dpi = 600,
   limitsize = TRUE, bg="white"
@@ -1020,7 +1209,7 @@ ggplot(effects_full_annual_summary, aes(x=year, y=prop_below))+
  scale_colour_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677"), drop=FALSE, labels=labs )+
  scale_fill_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677"), drop=FALSE, labels=labs )+
   xlab("Year") +
-  ylab("Proportion of observations w/ >10% biomass reduction")
+  ylab("Proportion of observations \n w/ >10% local density reduction")
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/prop_below_obs_annual.png"),
@@ -1070,7 +1259,7 @@ ggplot(effects_full_annual_summary, aes(x=depth_bin, y=prop_below))+
   scale_colour_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677"), drop=FALSE, labels=labs )+
   scale_fill_manual(values=c("#88CCEE", "#999933", "#44AA99","#CC6677"), drop=FALSE, labels=labs )+
   xlab("Depth (m)") +
-  ylab("Proportion of observations w/ >10% biomass reduction")+
+  ylab("Proportion of observations w/ >10% local density reduction")+
   geom_vline(dat2plot, mapping=aes(xintercept=depth_limit), linetype="dashed", colour="black")
 
 ggsave(
@@ -1099,18 +1288,49 @@ boltz = 0.000086173324
 tref <- 12
 cc_grid$invtemp <- (1 / boltz)  * ( 1 / (cc_grid$temperature_C + 273.15) - 1 / (tref + 273.15))
 bc_grid$invtemp <- (1 / boltz)  * ( 1 / (bc_grid$temperature_C + 273.15) - 1 / (tref + 273.15))
-cc_grid2 <- filter(cc_grid, survey=="NWFSC.Combo")
+cc_grid <- filter(cc_grid, survey=="NWFSC.Combo")
+#combine grid
+grid <- bind_rows(bc_grid, cc_grid)
+grid$pred_id <- 1:nrow(grid)
 
-#Plot oxygen data
+#Set mapping extent
+ylims <- c(min(grid$Y)*1000, max(grid$Y)*1000)
+xlims <- c(min(grid$X)*1000, max(grid$X)*1000)
 
+##Plot oxygen data
+#Just WA
+grid_wa <- filter(grid, latitude>46&latitude<48.5)
+ylims2 <- c(min(grid_wa$Y)*1000, max(grid_wa$Y)*1000)
+xlims2 <- c(min(grid_wa$X)*1000, max(grid_wa$X)*1000)
+ggplot(us_coast_proj) + geom_sf() +
+geom_point(grid_wa,mapping=aes(x=X*1000, y=Y*1000, colour=po2), size=0.5)+
+  #geom_point(filter(dat2plot, est_effect_raw==max_effect),mapping=aes(x=X*1000, y=Y*1000), colour="#440154FF", size=0.5)+
+  #geom_point(filter(dat2plot, est_effect_raw<max_effect),mapping=aes(x=X*1000, y=Y*1000, colour=est_effect_prop), size=0.5)+
+  scale_x_continuous(breaks=c(-125), limits=c(xlims2))+
+  ylim(ylims2)+
+  facet_wrap("year")+
+  theme_minimal(base_size=18)+
+  xlab("Longitude")+
+  ylab("Latitude")+
+  theme(legend.position=c(0.7,0.1), panel.spacing = unit(1.5, "lines"), strip.text=element_text(size=13))+
+ scale_colour_viridis(option="mako",limits=c(0,3),oob=scales::squish, name="Oxygen (kPa)", labels=c(0,1,2,">3"))
+
+ggsave(
+  paste0("output/", output_folder, "/", "oxygen_grid_wa_annual.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 8.5,
+  height = 11,
+  units = c("in"),
+  dpi = 600,
+  limitsize = TRUE, bg="white"
+)
 
 #Pull correct Eo parameter
 mi_pars <- read.csv("data/taxa_table.csv")
 mi_pars$Group <- tolower(mi_pars$Group)
-
-#combine grid
-grid <- bind_rows(bc_grid, cc_grid)
-grid$pred_id <- 1:nrow(grid)
 
 options(dplyr.summarise.inform = FALSE)
 
@@ -1261,7 +1481,7 @@ process_species <- function(species2do){
   mi3_s <- preds$mi3_s
   pred_id <- preds$pred_id
 
-  #Which AIC/data to pull
+  #Which aic/data to pull
   this_aic <- filter(aic, species==this_species& `data type`==this_data)
   this_dat <- this_data
   print(this_dat)
@@ -1282,7 +1502,7 @@ process_species <- function(species2do){
   #Get model weights
   aics <- list()
   for (k in 1:length(models)){
-    aic_models <- AIC(model_fits[[k]])
+    aic_models <- stats::AIC(model_fits[[k]])
     aics[[k]] <- aic_models
   }
   aics <- unlist(aics)
@@ -1360,20 +1580,20 @@ grids_x <- process_species(species_list[i])
 grids[[i]] <- grids_x
 }
 
-#Or load in
-grids <- list()
-for(i in 1:length(species_list)){
-this_species <- species_list[i]
-grid_x <- readRDS(paste0("output/", output_folder, "/", this_species, "_", "grid.rds"))
-grids[[i]] <- grid_x
-}
-
 for(i in 1:length(grids)){
   grid_x <- grids[[i]]
   grid_x <- filter(grid_x, region=="bc"|(region=="cc"&survey=="NWFSC.Combo"))
   grids[[i]] <- grid_x
  saveRDS(grid_x,paste0("output/", output_folder, "/", this_species, "_", "grid.rds"))
   
+}
+
+#Or load in
+grids <- list()
+for(i in 1:length(species_list)){
+  this_species <- species_list[i]
+  grid_x <- readRDS(paste0("output/", output_folder, "/", this_species, "_", "grid.rds"))
+  grids[[i]] <- grid_x
 }
 
 #Filter to one year
@@ -1407,12 +1627,12 @@ ggplot(us_coast_proj) + geom_sf() +
   #geom_point(filter(dat2plot, est_effect_raw<max_effect),mapping=aes(x=X*1000, y=Y*1000, colour=est_effect_prop), size=0.5)+
   scale_x_continuous(breaks=c(-130,-120), limits=c(xlims))+
   ylim(ylims)+
-  facet_wrap("common_name", ncol=5, labeller=labeller(common_name=label_wrap_gen(10)))+
+  facet_wrap("common_name", ncol=4, labeller=labeller(common_name=label_wrap_gen(10)))+
   theme_minimal(base_size=16)+
   xlab("Longitude")+
   ylab("Latitude")+
   theme(legend.position=c(0.93,0.1), panel.spacing = unit(1.5, "lines"), strip.text=element_text(size=13))+
-  scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+  scale_colour_viridis(name="Reduction in \nlocal density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/grid_combined_2021.png"),
@@ -1437,12 +1657,12 @@ ggplot(us_coast_proj) + geom_sf() +
   #geom_point(filter(dat2plot, est_effect_raw<max_effect),mapping=aes(x=X*1000, y=Y*1000, colour=est_effect_prop), size=0.5)+
   scale_x_continuous(breaks=c(-125,-120), limits=c(min(dat2plot_wa$X)*1000, max(dat2plot_wa$X)*1000))+
   ylim(min(dat2plot_wa$Y)*1000, max(dat2plot_wa$Y)*1000)+
-  facet_wrap("common_name", ncol=5, labeller=labeller(common_name=label_wrap_gen(10)))+
+  facet_wrap("common_name", ncol=4, labeller=labeller(common_name=label_wrap_gen(10)))+
   theme_minimal(base_size=18)+
   xlab("Longitude")+
   ylab("Latitude")+
   theme(legend.position=c(0.94,0.1), panel.spacing=unit(1,"lines"))+
-  scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+  scale_colour_viridis(name="Reduction in \nlocal density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/grid_combined_2021_WA.png"),
@@ -1473,34 +1693,6 @@ for(i in 1:length(grids)){
   }
 }
 
-temp <- filter(grids3, common_name=="canary rockfish"|common_name=="shortspine thornyhead"|common_name=="redbanded rockfish"|common_name=="pacific hake")
-
-ggplot(us_coast_proj) + geom_sf() +
-  geom_point(temp,mapping=aes(x=X*1000, y=Y*1000, colour=ensemble_mean), size=0.5)+
-  #geom_point(filter(dat2plot_wa, est_effect_raw==max_effect),mapping=aes(x=X*1000, y=Y*1000), colour="#440154FF", size=0.5)+
-  #geom_point(filter(dat2plot_wa, est_effect_raw<max_effect),mapping=aes(x=X*1000, y=Y*1000, colour=est_effect_prop), size=0.5)+
-  scale_x_continuous(breaks=c(-125,-120), limits=c(min(temp$X)*1000, max(temp$X)*1000))+
-  ylim(min(temp$Y)*1000, max(temp$Y)*1000)+
-  facet_nested(~common_name~year)+
-  theme_minimal(base_size=18)+
-  xlab("Longitude")+
-  ylab("Latitude")+
-  theme(legend.position="top", legend.text = element_text(angle = 45, hjust = 1), legend.justification="center", legend.box.spacing = unit(0, "pt"))+
-  scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
-
-ggsave(
-  paste0("output/", output_folder, "/", "plots/grid_year_comp_WA.png"),
-  plot = last_plot(),
-  device = NULL,
-  path = NULL,
-  scale = 1,
-  width = 6,
-  height = 11,
-  units = c("in"),
-  dpi = 600,
-  limitsize = TRUE, bg="white"
-)
-
 #Plot all years, each species separately
 for(i in 1:length(grids)) {
   to_do <- grids[[i]]
@@ -1522,7 +1714,7 @@ for(i in 1:length(grids)) {
     ylab("Latitude")+
     theme(legend.position=c(0.8,0.1))+
     #ggtitle(paste(this_species, this_dat, sep=" "))
-    scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+    scale_colour_viridis(name="Reduction in \nlocal density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
 
   ggsave(
     paste0("output/", output_folder, "/", "plots/grid_annual/map_",this_species,"_", this_dat,".png"),
@@ -1560,7 +1752,7 @@ for(i in 1:length(grids)) {
     ylab("Latitude")+
     theme(legend.position=c(0.8,0.1))+
     #ggtitle(paste(this_species, this_dat, sep=" "))+
-    scale_colour_viridis(name="Reduction in \nbiomass ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+    scale_colour_viridis(name="Reduction in \nlocal density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
   
   ggsave(
     paste0("output/", output_folder, "/", "plots/grid_annual_WA/map_",this_species,"_", this_dat,".png"),
@@ -1645,7 +1837,7 @@ ggplot(effects, aes(x=year, y=area_sum_med))+
   scale_fill_manual(values=c("#44AA99","#CC6677"), drop=FALSE, labels=labs )+
   scale_colour_manual(values=c("#44AA99","#CC6677"), drop=FALSE, labels=labs )+
   xlab("Year") +
-  ylab("Proportion of area w/ >10% biomass reduction")
+  ylab("Proportion of area w/ >10% local density reduction")
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/prop_area_below_grid.png"),
@@ -1654,7 +1846,54 @@ ggsave(
   path = NULL,
   scale = 1,
   width = 13,
-  height = 13,
+  height = 10,
+  units = c("in"),
+  dpi = 600,
+  limitsize = TRUE, bg="white"
+)
+
+##Just selected species, for subset figure
+temp <- filter(grids3, common_name=="canary rockfish"|common_name=="shortspine thornyhead"|common_name=="blackbelly eelpout"|common_name=="silvergray rockfish")
+
+a <- ggplot(us_coast_proj) + geom_sf() +
+  geom_point(temp,mapping=aes(x=X*1000, y=Y*1000, colour=ensemble_mean), size=0.5)+
+  #geom_point(filter(dat2plot_wa, est_effect_raw==max_effect),mapping=aes(x=X*1000, y=Y*1000), colour="#440154FF", size=0.5)+
+  #geom_point(filter(dat2plot_wa, est_effect_raw<max_effect),mapping=aes(x=X*1000, y=Y*1000, colour=est_effect_prop), size=0.5)+
+  scale_x_continuous(breaks=c(-125,-120), limits=c(min(temp$X)*1000, max(temp$X)*1000))+
+  ylim(min(temp$Y)*1000, max(temp$Y)*1000)+
+  facet_nested(~common_name~year, labeller=labeller(common_name=label_wrap_gen(15)))+
+  theme_minimal(base_size=16)+
+  xlab("Longitude")+
+  ylab("Latitude")+
+  theme(legend.position="top", legend.text = element_text(angle = 45, hjust = 1), legend.justification="center", legend.box.spacing = unit(0, "pt"))+
+  scale_colour_viridis(name="Reduction in \nlocal density ", limits=c(0,0.8), breaks=c(0,0.25, 0.5,0.75,1), labels=scales::percent(c(0,0.25,0.5,0.75,1)), oob = scales::squish, option="plasma")
+
+temp <- filter(effects, common_name=="canary rockfish"|common_name=="shortspine thornyhead"|common_name=="blackbelly eelpout"|common_name=="silvergray rockfish")
+
+b <- ggplot(temp, aes(x=year, y=area_sum_med))+
+  geom_line(aes(colour=region))+
+  geom_ribbon(aes(ymin=se1, ymax=se2, fill=region), alpha=0.2)+
+  facet_wrap("common_name", ncol=1,scales="free_y",labeller=labeller(common_name=label_wrap_gen(15)))+
+  theme(legend.title=element_blank(), strip.background = element_blank(), strip.text=element_blank(),
+        legend.justification="center", legend.box.spacing = unit(0, "pt"), legend.position="top",
+        legend.text=element_text(size=16), axis.text=(element_text(size=16)), axis.title=element_text(size=16))+
+  scale_fill_manual(values=c("#44AA99","#CC6677"), drop=FALSE, labels=labs )+
+  scale_colour_manual(values=c("#44AA99","#CC6677"), drop=FALSE, labels=labs )+
+  guides(fill = guide_legend(nrow = 2))+
+  xlab("Year") +
+  ylab("Proportion of area w/ >10% local density reduction")
+
+patchwork <- b+a
+patchwork + plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 18))
+
+ggsave(
+  paste0("output/", output_folder, "/", "plots/prop_area_below_grid_subset.png"),
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  width = 8.5,
+  height = 11,
   units = c("in"),
   dpi = 600,
   limitsize = TRUE, bg="white"
@@ -1733,7 +1972,7 @@ ggh4x::facetted_pos_scales(x=list(scale_x_continuous(breaks=c(100,300,500), limi
   scale_fill_manual(values=c("#44AA99","#CC6677"), drop=FALSE, labels=labs )+
   scale_colour_manual(values=c("#44AA99","#CC6677"), drop=FALSE, labels=labs )+
   xlab("Depth (m)") +
-  ylab("Proportion of area w/ >10% biomass reduction")+
+  ylab("Proportion of area w/ >10% local density reduction")+
   geom_vline(aes(xintercept=depth_limit), linetype="dashed")
 
 ggsave(
@@ -1743,7 +1982,7 @@ ggsave(
   path = NULL,
   scale = 1,
   width = 8.5,
-  height = 11,
+  height = 9,
   units = c("in"),
   dpi = 600,
   limitsize = TRUE, bg="white"
@@ -1824,7 +2063,7 @@ ggplot(effects, aes(x=year, y=area_sum_med))+
   scale_colour_manual(values=c("red", "darkgreen", "royalblue","gold"), drop=FALSE)+
   scale_x_continuous(breaks=c(2008,2016,2024))+
   xlab("Year") +
-  ylab("Proportion of area w/ >10% biomass reduction")
+  ylab("Proportion of area w/ >10% local density reduction")
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/prop_area_below_grid_states.png"),
@@ -1833,7 +2072,7 @@ ggsave(
   path = NULL,
   scale = 1,
   width =9,
-  height = 11,
+  height = 8,
   units = c("in"),
   dpi = 600,
   limitsize = TRUE, bg="white"
@@ -1880,100 +2119,10 @@ ggplot(us_coast_proj) + geom_sf() +
   xlab("Longitude")+
   ylab("Latitude")+
   theme(legend.position=c(0.92,0.1), panel.spacing = unit(1, "lines"))+
-scale_colour_viridis(name="Reduction in \nbiomass ",option="plasma")
+scale_colour_viridis(name="Reduction in \nlocal density ",option="plasma")
 
 ggsave(
   paste0("output/", output_folder, "/", "plots/grid_persistence.png"),
-  plot = last_plot(),
-  device = NULL,
-  path = NULL,
-  scale = 1,
-  width = 8.5,
-  height = 11,
-  units = c("in"),
-  dpi = 600,
-  limitsize = TRUE, bg="white"
-)
-
-#Persistence mapping--how many years was a grid point more than a 50%, or 50%, decline--or average?
-for(i in 1:length(grids)){
-  test <- grids[[i]]
-  test <- unique(test)
-  test <- filter(test, depth_m<(depth_limit+200))
-  test <- filter(test, (latitude>(min_lat-0.5))&(latitude<max_lat+0.5))
-  test <- filter(test, ensemble_mean>0.5)
-  
-  count <- test%>%
-    group_by(X, Y, latitude, longitude, region) %>%
-    summarise(count=n())
-  
-  count <- test %>%
-    group_by(X, Y, latitude, longitude) %>%
-    summarise(counts=n()) %>%
-    distinct()%>%
-    ungroup()
-  
-  count$species <- unique(test$common_name)
-  
-  if(i==1){
-    count_total <- count
-  }
-  if(i>1){
-    count_total <- bind_rows(count_total, count)
-  }
-}
-
-#Add all grid points
-grid1 <- filter(grids[[1]], year==2021)
-
-count_total2 <- filter(count_total, latitude>46&latitude<48.5)
-xlims <- c(min(count_total2$X)*1000, max(count_total2$X)*1000)
-ylims <- c(min(count_total2$Y)*1000, max(count_total2$Y)*1000)
-ggplot(us_coast_proj) + geom_sf() +
-  geom_point(grid1,mapping=aes(x=X*1000, y=Y*1000), color="grey", size=0.9)+
-  geom_point(count_total2,mapping=aes(x=X*1000, y=Y*1000, colour=counts), size=0.9)+
-  #geom_point(filter(dat2plot, est_effect_raw==max_effect),mapping=aes(x=X*1000, y=Y*1000), colour="#440154FF", size=0.5)+
-  #geom_point(filter(dat2plot, est_effect_raw<max_effect),mapping=aes(x=X*1000, y=Y*1000, colour=est_effect_prop), size=0.5)+
-  scale_x_continuous(breaks=c(-130,-120), limits=c(xlims))+
-  ylim(ylims)+
-  facet_wrap("species", ncol=5, labeller=labeller(species=label_wrap_gen(10)))+
-  theme_minimal(base_size=18)+
-  xlab("Longitude")+
-  ylab("Latitude")+
-  theme(legend.position="top")+
-  scale_colour_viridis(name="Number of years \n w/ >50% reduction",option="plasma")
-
-ggsave(
-  paste0("output/", output_folder, "/", "plots/grid_persistence_0.5_wa.png"),
-  plot = last_plot(),
-  device = NULL,
-  path = NULL,
-  scale = 1,
-  width = 8.5,
-  height = 11,
-  units = c("in"),
-  dpi = 600,
-  limitsize = TRUE, bg="white"
-)
-
-xlims <- c(min(count_total$X)*1000, max(count_total$X)*1000)
-ylims <- c(min(count_total$Y)*1000, max(count_total$Y)*1000)
-ggplot(us_coast_proj) + geom_sf() +
-  geom_point(grid1,mapping=aes(x=X*1000, y=Y*1000), color="grey", size=0.9)+
-  geom_point(count_total,mapping=aes(x=X*1000, y=Y*1000, colour=counts), size=0.9)+
-  #geom_point(filter(dat2plot, est_effect_raw==max_effect),mapping=aes(x=X*1000, y=Y*1000), colour="#440154FF", size=0.5)+
-  #geom_point(filter(dat2plot, est_effect_raw<max_effect),mapping=aes(x=X*1000, y=Y*1000, colour=est_effect_prop), size=0.5)+
-  scale_x_continuous(breaks=c(-130,-120), limits=c(xlims))+
-  ylim(ylims)+
-  facet_wrap("species", ncol=5, labeller=labeller(species=label_wrap_gen(10)))+
-  theme_minimal(base_size=18)+
-  xlab("Longitude")+
-  ylab("Latitude")+
-  theme(legend.position="top")+
-  scale_colour_viridis(name="Number of years \n w/ >50% reduction",option="plasma")
-
-ggsave(
-  paste0("output/", output_folder, "/", "plots/grid_persistence_0.5.png"),
   plot = last_plot(),
   device = NULL,
   path = NULL,

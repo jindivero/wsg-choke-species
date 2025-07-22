@@ -70,7 +70,7 @@ dat$catch_weight_combined <- replace(dat$catch_weight_combined, dat$catch_weight
 dat$catch_count_combined <- replace(dat$catch_count_combined, dat$catch_count_combined == "NaN", NA)
 
 #Spatio-temporal variation--if T, uses IID; if F, no spatio-temporal term
-spatio_temp <- F
+spatio_temp <- T
 
 #Filter depths?
 filter_depth <- T
@@ -78,11 +78,18 @@ filter_depth <- T
 #Filter latitudes?
 filter_lats <- T
 
+#Depth term
+cubic_depth <- F
+depth_term <- "s(log_depth_scaled,k=4)"
+if(cubic_depth) {
+  depth_term <- "log_depth_scaled+log_depth_scaled2+log_depth_scaled3"
+}
+
 #Name of output folder
-output_folder <- "region_comp"
+output_folder <- "region_comp3"
 
 #Fit models 1-6? (Quadratic depth, not cubic depth)
-quad_depth_m1_6 <- T
+quad_depth_m1_6 <- F
 
 #Fit models 
 cub_depth_m7_16 <- T
@@ -229,16 +236,16 @@ for (h in 1:length(species)) {
       print(paste(this_species))
       print("fitting m1")
       if(dat_names[i]!="coastwide_iphc"){
-        formula =   "catch ~ -1 + year+survey+log_depth_scaled+ log_depth_scaled2"
+        formula =   paste0("catch ~ -1 + year+survey+", depth_term)
         st_type="iid"
       } else {
-        formula = "catch ~ -1 + year+region+survey+log_depth_scaled+ log_depth_scaled2"
+        formula = paste0("catch ~ -1 + year+region+survey+", depth_term)
         if(!spatio_temp){
           st_type <- "off"
-          formula = "catch ~ -1 + year+ region+survey+log_depth_scaled+ log_depth_scaled2"
+          formula = paste0("catch ~ -1 year+ region+survey+", depth_term)
         } else{
           st_type="iid"
-          formula = "catch ~ -1 + year+region +survey+log_depth_scaled+ log_depth_scaled2"
+          formula = paste0("catch ~ -1 + year+region +survey+", depth_term)
         }
       }
       start = Sys.time()
@@ -264,15 +271,15 @@ for (h in 1:length(species)) {
       # Model 2: quadratic temp (uniform across regions)
       print("fitting m2")
       if(dat_names[i]!="coastwide _iphc"){
-        formula =  "catch ~ -1+year+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
+        formula =  paste0("catch ~ -1+year+survey+temp_scaled + temp_scaled2+", depth_term)
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula ="catch ~ -1 + year+region+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
+          formula =paste0("catch ~ -1 + year+region+survey+temp_scaled + temp_scaled2+", depth_term)
         } else{
           st_type="iid"
-          formula ="catch ~ -1 + year+region+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2"
+          formula =paste0("catch ~ -1 + year+region+survey+temp_scaled + temp_scaled2 +", depth_term)
         }
       }
       start = Sys.time()
@@ -298,15 +305,15 @@ for (h in 1:length(species)) {
       # Model 3: breakpoint MI low
       print("fitting m3")
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1 +year+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula =  paste0("catch ~ -1 +year+survey+breakpt(mi1_s)+", depth_term)
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula = "catch ~ -1 + year+region +survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula = paste0("catch ~ -1 + year+region +survey+breakpt(mi1_s)+", depth_term)
         } else{
           st_type="iid"
-          formula = "catch ~ -1 + year+region+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula = paste0("catch ~ -1 + year+region+survey+breakpt(mi1_s)+", depth_term)
         }
       }
       start = Sys.time()
@@ -333,15 +340,15 @@ for (h in 1:length(species)) {
       print("fitting m4")
       start = Sys.time()
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1+year +survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula =   paste0("catch ~ -1+year +survey+breakpt(mi2_s)+", depth_term)
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula =  "catch ~ -1 + year+region+survey +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  paste0("catch ~ -1 + year+region+survey +breakpt(mi2_s)+", depth_term)
         } else{
           st_type="iid"
-          formula =  "catch ~ -1 + year+region+survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  paste0("catch ~ -1 + year+region+survey+breakpt(mi2_s)+", depth_term)
         }
       }
       m4 <-try(sdmTMB(
@@ -367,15 +374,15 @@ for (h in 1:length(species)) {
       print("fitting m5")
       start = Sys.time()
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1+year +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula = paste0("catch ~ -1+year +breakpt(mi3_s)+", depth_term)
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula =  "catch ~ -1 + year+region +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  paste0("catch ~ -1 + year+region +breakpt(mi3_s)+", depth_term)
         } else{
           st_type="iid"
-          formula =  "catch ~ -1 + region +year+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  paste0("catch ~ -1 + region +year+breakpt(mi3_s)+", depth_term)
         }
       }
       m5 <- try(sdmTMB(
@@ -401,15 +408,15 @@ for (h in 1:length(species)) {
       print("fitting m6")
       start = Sys.time()
       if(dat_names[i]!="coastwide _iphc"){
-        formula =   "catch ~ -1 +year+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
+        formula =   paste0("catch ~ -1 +year+survey+breakpt(po2_s)+", depth_term)
         st_type="iid"
       } else {
         if(!spatio_temp){
           st_type <- "off"
-          formula =  "catch ~ -1 + year+region +survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula =  paste0("catch ~ -1 + year+region +survey+breakpt(po2_s)+", depth_term)
         } else{
           st_type="iid"
-          formula =  "catch ~ -1 +year+region+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2"
+          formula = paste0("catch ~ -1 +year+region+survey+breakpt(po2_s)+", depth_term)
         }
       }
       m6 <- try(sdmTMB(
@@ -437,15 +444,15 @@ for (h in 1:length(species)) {
     print(paste(this_species))
     print("fitting m7")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1+year+survey+", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula = "catch ~ -1 + year+region+survey+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1 + year+region+survey+", depth_term)
       } else{
         st_type="iid"
-        formula = "catch ~ -1 + year+region+survey+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1 + year+region+survey+", depth_term)
       }
     }
     start = Sys.time()
@@ -471,15 +478,15 @@ for (h in 1:length(species)) {
     # Model 8: quadratic temp (uniform across regions)
     print("fitting m8")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =  "catch ~ -1+year+survey+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =  paste0("catch ~ -1+year+survey+temp_scaled + temp_scaled2 +", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula ="catch ~ -1 + year+region+survey +year+temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =paste0("catch ~ -1 + year+region+survey +year+temp_scaled + temp_scaled2 +", depth_term)
       } else{
         st_type="iid"
-        formula ="catch ~ -1 + year+region+survey +temp_scaled + temp_scaled2 + log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =paste0("catch ~ -1 + year+region+survey +temp_scaled + temp_scaled2 +", depth_term)
       }
     }
     start = Sys.time()
@@ -505,15 +512,15 @@ for (h in 1:length(species)) {
     # Model 9: breakpoint MI low
     print("fitting m9")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =   paste0("catch ~ -1 +year+survey+breakpt(mi1_s)+", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula = "catch ~ -1 + year+region+survey +year+breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =paste0("catch ~ -1 + year+region+survey +year+breakpt(mi1_s)+", depth_term)
       } else{
         st_type="iid"
-        formula = "catch ~ -1 + year+region+survey +breakpt(mi1_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =paste0("catch ~ -1 + year+region+survey +breakpt(mi1_s)+", depth_term)
       }
     }
     start = Sys.time()
@@ -540,15 +547,14 @@ for (h in 1:length(species)) {
     print("fitting m10")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1 +year+survey+breakpt(mi2_s)+", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =  "catch ~ -1 + year+region+survey+year+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
-      } else{
+        formula = paste0("catch ~ -1 + year+region+survey+year+breakpt(mi2_s)+", depth_term)
         st_type="iid"
-        formula =  "catch ~ -1 + year+region+ survey+breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1 + year+region+ survey+breakpt(mi2_s)+", depth_term)
       }
     }
     m10 <-try(sdmTMB(
@@ -574,15 +580,15 @@ for (h in 1:length(species)) {
     print("fitting m11")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1 +year+survey+breakpt(mi3_s)+", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =  "catch ~ -1 + year+region+ survey +year+breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1 + year+region+ survey +year+breakpt(mi3_s)+", depth_term)
       } else{
         st_type="iid"
-        formula =  "catch ~ -1 + year+region+survey +breakpt(mi3_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  paste0("catch ~ -1 + year+region+survey +breakpt(mi3_s)+", depth_term)
       }
     }
     m11 <- try(sdmTMB(
@@ -607,10 +613,10 @@ for (h in 1:length(species)) {
     print("fitting m12")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+ year+survey+breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1+ year+survey+breakpt(po2_s)+", depth_term)
       st_type="iid"
     } else {
-      formula =  "catch ~ -1 + year+region+survey+year +breakpt(po2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1 + year+region+survey+year +breakpt(po2_s)+", depth_term)
       if(!spatio_temp){
         st_type <- "off"
       } else{
@@ -638,15 +644,15 @@ for (h in 1:length(species)) {
     # Model 13: breakpoint MI low+quad temp
     print("fitting m13")
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1 +year+survey+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1 +year+survey+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula = "catch ~ -1 + year+region+survey +year+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1 + year+region+survey +year+breakpt(mi1_s)+ +temp_scaled + temp_scaled2+", depth_term)
       } else{
         st_type="iid"
-        formula = "catch ~ -1 + year+region+ survey +breakpt(mi1_s)+ +temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1 + year+region+ survey +breakpt(mi1_s)+ +temp_scaled + temp_scaled2+", depth_term)
       }
     }
     start = Sys.time()
@@ -673,10 +679,10 @@ for (h in 1:length(species)) {
     print("fitting m14")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey+breakpt(mi2_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1+year+survey+breakpt(mi2_s)+temp_scaled + temp_scaled2+", depth_term)
       st_type="iid"
     } else {
-      formula =  "catch ~ -1 + year+region+survey+year +breakpt(mi2_s)+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula =  paste0("catch ~ -1 + year+region+survey+year +breakpt(mi2_s)+", depth_term)
       if(!spatio_temp){
         st_type <- "off"
       } else{
@@ -706,15 +712,15 @@ for (h in 1:length(species)) {
     print("fitting m15")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey +breakpt(mi3_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1+year+survey +breakpt(mi3_s)+ temp_scaled + temp_scaled2+", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =  "catch ~ -1 + year+region+survey +year+breakpt(mi3_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1 + year+region+survey +year+breakpt(mi3_s)+temp_scaled + temp_scaled2+", depth_term)
       } else{
         st_type="iid"
-        formula =  "catch ~ -1 + year+region+survey +breakpt(mi3_s)+temp_scaled + temp_scaled2+ log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula =  paste0("catch ~ -1 + year+region+survey +breakpt(mi3_s)+temp_scaled + temp_scaled2+", depth_term)
       }
     }
     m15 <- try(sdmTMB(
@@ -739,15 +745,15 @@ for (h in 1:length(species)) {
     print("fitting m16")
     start = Sys.time()
     if(dat_names[i]!="coastwide _iphc"){
-      formula =   "catch ~ -1+year+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+      formula = paste0("catch ~ -1+year+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+", depth_term)
       st_type="iid"
     } else {
       if(!spatio_temp){
         st_type <- "off"
-        formula =   "catch ~ -1+year+region+survey +year+breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1+year+region+survey +year+breakpt(po2_s)+ temp_scaled + temp_scaled2+", depth_term)
       } else{
         st_type="iid"
-        formula =   "catch ~ -1+year+region+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+log_depth_scaled+ log_depth_scaled2+log_depth_scaled3"
+        formula = paste0("catch ~ -1+year+region+survey +breakpt(po2_s)+ temp_scaled + temp_scaled2+", depth_term)
       }
     }
     m16 <- try(sdmTMB(
